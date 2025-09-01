@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  client:
+    build: ./client
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8000
+      - VITE_WS_URL=ws://localhost:8000
+    depends_on:
+      - web-server
+    networks:
+      - transcription-network
+
+  web-server:
+    build: ./web-server
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./web-server:/app
+      - ./shared_audio:/app/shared_audio
+    environment:
+      - MONGODB_URL=mongodb://mongodb:27017
+      - DATABASE_NAME=meeting_db
+    depends_on:
+      - mongodb
+    networks:
+      - transcription-network
+
+  mongodb:
+    image: mongo:7.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongodb/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+    environment:
+      - MONGO_INITDB_DATABASE=meeting_db
+    networks:
+      - transcription-network
+
+volumes:
+  mongodb_data:
+
+networks:
+  transcription-network:
+    driver: bridge
