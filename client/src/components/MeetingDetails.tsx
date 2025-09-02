@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { meetingApi } from '../services/api';
 import { Meeting } from '../types';
+import AudioRecorder from './AudioRecorder';
 
 interface MeetingDetailsProps {
   meetingId: string;
@@ -14,11 +15,7 @@ export default function MeetingDetails({ meetingId, onClose }: MeetingDetailsPro
   const [editingKeywords, setEditingKeywords] = useState(false);
   const [keywordInput, setKeywordInput] = useState('');
   const [localKeywords, setLocalKeywords] = useState<string[]>([]);
-  const [isRecording, setIsRecording] = useState(false);
   const [audioStatus, setAudioStatus] = useState<string>('idle');
-  
-  const websocketRef = useRef<WebSocket | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 
   useEffect(() => {
     loadMeetingDetails();
@@ -30,18 +27,6 @@ export default function MeetingDetails({ meetingId, onClose }: MeetingDetailsPro
     }
   }, [meeting]);
 
-  useEffect(() => {
-    return () => {
-      // Cleanup WebSocket connection on unmount
-      if (websocketRef.current) {
-        websocketRef.current.close();
-      }
-      // Cleanup media recorder
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.stop();
-      }
-    };
-  }, []);
 
   const loadMeetingDetails = async () => {
     if (!meetingId) {
@@ -90,72 +75,8 @@ export default function MeetingDetails({ meetingId, onClose }: MeetingDetailsPro
     setEditingKeywords(false);
   };
 
-  const startAudioStreaming = async () => {
-    try {
-      setAudioStatus('requesting-permission');
-      
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
-      setAudioStatus('connecting');
-      
-      // Create WebSocket connection
-      const ws = new WebSocket(`ws://localhost:8000/ws/meeting/${meetingId}/audio`);
-      websocketRef.current = ws;
-      
-      ws.onopen = () => {
-        setAudioStatus('connected');
-        setIsRecording(true);
-        
-        // Start recording
-        const mediaRecorder = new MediaRecorder(stream, {
-          mimeType: 'audio/webm'
-        });
-        mediaRecorderRef.current = mediaRecorder;
-        
-        mediaRecorder.ondataavailable = (event) => {
-          if (event.data.size > 0 && ws.readyState === WebSocket.OPEN) {
-            ws.send(event.data);
-          }
-        };
-        
-        mediaRecorder.start(1000); // Send chunks every 1 second
-      };
-      
-      ws.onmessage = (event) => {
-        console.log('Received from server:', event.data);
-        // Handle transcription updates here
-      };
-      
-      ws.onclose = () => {
-        setAudioStatus('disconnected');
-        setIsRecording(false);
-        stream.getTracks().forEach(track => track.stop());
-      };
-      
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        setAudioStatus('error');
-        setIsRecording(false);
-      };
-      
-    } catch (error) {
-      console.error('Failed to start audio streaming:', error);
-      setAudioStatus('error');
-      alert('Failed to access microphone or start streaming');
-    }
-  };
-
-  const stopAudioStreaming = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    }
-    
-    if (websocketRef.current) {
-      websocketRef.current.close();
-    }
-    
-    setIsRecording(false);
-    setAudioStatus('idle');
+  const handleAudioStatusChange = (status: string) => {
+    setAudioStatus(status);
   };
 
   if (!meetingId) {
@@ -263,28 +184,10 @@ export default function MeetingDetails({ meetingId, onClose }: MeetingDetailsPro
           )}
         </div>
 
-        <div className="audio-section">
-          <h3>Audio Recording</h3>
-          <div className="audio-controls">
-            <div className="audio-status">
-              Status: <span className={`status-indicator ${audioStatus}`}>{audioStatus}</span>
-            </div>
-            {!isRecording ? (
-              <button 
-                onClick={startAudioStreaming} 
-                className="start-recording-btn"
-                disabled={audioStatus === 'requesting-permission' || audioStatus === 'connecting'}
-              >
-                {audioStatus === 'requesting-permission' ? 'Requesting Permission...' :
-                 audioStatus === 'connecting' ? 'Connecting...' : 'Start Recording'}
-              </button>
-            ) : (
-              <button onClick={stopAudioStreaming} className="stop-recording-btn">
-                Stop Recording
-              </button>
-            )}
-          </div>
-        </div>
+        <AudioRecorder 
+          meetingId={meetingId} 
+          onStatusChange={handleAudioStatusChange}
+        />
 
         {meeting.fullTranscription && (
           <div className="transcription-section">
