@@ -39,14 +39,15 @@ async def save_audio_chunk(meeting_id: str, audio_data: bytes) -> str:
     Returns the saved file path
     """
     try:
-        # Create meeting-specific directory
+        # Create meeting-specific directory with raw subfolder
         meeting_dir = Path(SHARED_AUDIO_PATH) / meeting_id
-        meeting_dir.mkdir(exist_ok=True)
+        raw_dir = meeting_dir / "raw"
+        raw_dir.mkdir(parents=True, exist_ok=True)
         
         # Generate UTC timestamp filename
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
         filename = f"{timestamp}.webm"
-        file_path = meeting_dir / filename
+        file_path = raw_dir / filename
         
         # Save audio chunk
         with open(file_path, "wb") as f:
