@@ -9,6 +9,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from bson import ObjectId
 import logging
+import httpx
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -26,6 +27,8 @@ app.add_middleware(
 MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
 DATABASE_NAME = "meeting_db"
 SHARED_AUDIO_PATH = "/app/shared_audio"
+TRANSCRIPTION_SERVICE_URL = os.getenv("TRANSCRIPTION_SERVICE_URL", "http://localhost:8001")
+WEB_SERVER_URL = os.getenv("WEB_SERVER_URL", "http://localhost:8000")
 
 client = AsyncIOMotorClient(MONGODB_URL)
 db = client[DATABASE_NAME]
@@ -59,6 +62,40 @@ async def save_audio_chunk(meeting_id: str, audio_data: bytes) -> str:
     except Exception as e:
         logger.error(f"Error saving audio chunk for meeting {meeting_id}: {e}")
         raise
+
+async def send_to_transcription_service(meeting_id: str, filename: str) -> Optional[str]:
+    """
+    Send audio file to transcription service for processing
+    Returns job_id if successful, None if failed
+    """
+    try:
+        webhook_url = f"{WEB_SERVER_URL}/webhook/transcription-completed"
+        
+        request_data = {
+            "meeting_id": meeting_id,
+            "filename": filename,
+            "webhook_url": webhook_url
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{TRANSCRIPTION_SERVICE_URL}/transcribe",
+                json=request_data,
+                timeout=30.0
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                job_id = result.get("job_id")
+                logger.info(f"Successfully queued transcription job {job_id} for meeting {meeting_id}, file {filename}")
+                return job_id
+            else:
+                logger.error(f"Transcription service error: {response.status_code} - {response.text}")
+                return None
+                
+    except Exception as e:
+        logger.error(f"Error sending to transcription service: {e}")
+        return None
 
 class PyObjectId(ObjectId):
     @classmethod
@@ -107,6 +144,17 @@ class Meeting(MeetingBase):
 
 class KeywordsUpdate(BaseModel):
     keywords: List[str]
+
+class TranscriptionWebhookResult(BaseModel):
+    job_id: str
+    meeting_id: str
+    filename: str
+    transcription_text: Optional[str] = None
+    confidence: Optional[float] = None
+    processing_time: float
+    status: str  # "completed" or "failed"
+    error_message: Optional[str] = None
+    processed_at: str
 
 @app.on_event("startup")
 async def startup_db_client():
@@ -278,6 +326,62 @@ async def update_meeting_keywords(meeting_id: str, keywords_update: KeywordsUpda
         logger.error(f"Error updating meeting keywords: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@app.post("/webhook/transcription-completed")
+async def transcription_webhook(result: TranscriptionWebhookResult):
+    """Receive transcription results from transcription service"""
+    try:
+        logger.info(f"Received transcription webhook for meeting {result.meeting_id}, file {result.filename}, status: {result.status}")
+        
+        if not ObjectId.is_valid(result.meeting_id):
+            logger.error(f"Invalid meeting ID in webhook: {result.meeting_id}")
+            raise HTTPException(status_code=400, detail="Invalid meeting ID")
+        
+        # Find the meeting
+        meeting = await db.meetings.find_one({"_id": ObjectId(result.meeting_id)})
+        if not meeting:
+            logger.error(f"Meeting not found for webhook: {result.meeting_id}")
+            raise HTTPException(status_code=404, detail="Meeting not found")
+        
+        if result.status == "completed":
+            # Update meeting with transcription result
+            current_transcription = meeting.get("full_transcription", "") or ""
+            
+            if result.transcription_text:
+                # Append new transcription to existing one
+                if current_transcription:
+                    updated_transcription = current_transcription + " " + result.transcription_text
+                else:
+                    updated_transcription = result.transcription_text
+                
+                # Update meeting document
+                update_data = {
+                    "full_transcription": updated_transcription,
+                    "updated_at": datetime.now(timezone.utc)
+                }
+                
+                await db.meetings.update_one(
+                    {"_id": ObjectId(result.meeting_id)},
+                    {"$set": update_data}
+                )
+                
+                logger.info(f"Updated meeting {result.meeting_id} with transcription from {result.filename}")
+            else:
+                logger.warning(f"No transcription text received for file {result.filename}")
+                
+        elif result.status == "failed":
+            logger.error(f"Transcription failed for meeting {result.meeting_id}, file {result.filename}: {result.error_message}")
+            
+            # Optionally update meeting status or add error info
+            # For now, we'll just log the error
+        
+        return {"status": "success", "message": "Webhook processed"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing transcription webhook: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 @app.websocket("/ws/meeting/{meeting_id}/audio")
 async def websocket_audio_endpoint(websocket: WebSocket, meeting_id: str):
     """WebSocket endpoint for audio streaming and real-time transcription"""
@@ -318,14 +422,19 @@ async def websocket_audio_endpoint(websocket: WebSocket, meeting_id: str):
             # Save audio chunk to shared volume
             try:
                 saved_file_path = await save_audio_chunk(meeting_id, data)
+                filename = Path(saved_file_path).name
                 await websocket.send_text(f"Audio chunk saved: {saved_file_path}")
+                
+                # Send to transcription service
+                job_id = await send_to_transcription_service(meeting_id, filename)
+                if job_id:
+                    await websocket.send_text(f"Transcription queued with job ID: {job_id}")
+                else:
+                    await websocket.send_text("Warning: Failed to queue transcription")
+                    
             except Exception as e:
                 logger.error(f"Failed to save audio chunk: {e}")
                 await websocket.send_text(f"Error saving audio chunk: {str(e)}")
-            
-            # TODO: Integrate with speech-to-text service (e.g., OpenAI Whisper, Google Speech-to-Text)
-            # transcription_result = await process_audio_chunk(data)
-            # await websocket.send_text(f"Transcription: {transcription_result}")
             
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected for meeting {meeting_id}")

@@ -26,8 +26,25 @@ services:
     environment:
       - MONGODB_URL=mongodb://mongodb:27017
       - DATABASE_NAME=meeting_db
+      - TRANSCRIPTION_SERVICE_URL=http://transcription:8001
+      - WEB_SERVER_URL=http://web-server:8000
     depends_on:
       - mongodb
+      - transcription
+    networks:
+      - transcription-network
+
+  transcription:
+    build: ./transcription
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./transcription:/app
+      - ./shared_audio:/app/shared_audio
+    environment:
+      - WEB_SERVER_URL=http://web-server:8000
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MAX_CONCURRENT_JOBS=3
     networks:
       - transcription-network
 
