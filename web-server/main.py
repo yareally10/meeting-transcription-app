@@ -1,10 +1,10 @@
-from fastapi import FastAPI, HTTPException, Depends, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, GetJsonSchemaHandler
+from pydantic.json_schema import JsonSchemaValue
 from typing import List, Optional, Dict
 import os
-import asyncio
 from datetime import datetime, timezone
 from bson import ObjectId
 import logging
@@ -79,21 +79,26 @@ transcription_service = TranscriptionService(TRANSCRIPTION_SERVICE_URL, WEB_SERV
 
 
 
-class PyObjectId(ObjectId):
+class PyObjectId(str):
     @classmethod
     def __get_validators__(cls):
         yield cls.validate
 
     @classmethod
     def validate(cls, v, validation_info=None):
-        if not ObjectId.is_valid(v):
-            raise ValueError("Invalid objectid")
-        return ObjectId(v)
+        if isinstance(v, ObjectId):
+            return str(v)
+        if isinstance(v, str):
+            if not ObjectId.is_valid(v):
+                raise ValueError("Invalid objectid")
+            return v
+        raise ValueError("Invalid objectid")
 
     @classmethod
-    def __get_pydantic_json_schema__(cls, field_schema):
-        field_schema.update(type="string")
-        return field_schema
+    def __get_pydantic_json_schema__(
+        cls, _source_type, _handler: GetJsonSchemaHandler
+    ) -> JsonSchemaValue:
+        return {"type": "string", "description": "MongoDB ObjectId"}
 
 class MeetingBase(BaseModel):
     title: str
@@ -156,9 +161,32 @@ async def shutdown_db_client():
 async def root():
     return {"message": "Meeting Transcription API", "version": "1.0.0"}
 
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "timestamp": datetime.now(timezone.utc)}
+
+@app.get("/transcription/health")
+async def get_transcription_service_health():
+    """Get health status of the transcription service"""
+    try:
+        health_status = await transcription_service.get_service_health()
+        if health_status.get("healthy", False):
+            return health_status
+        else:
+            raise HTTPException(status_code=503, detail=health_status)
+    except Exception as e:
+        logger.error(f"Error checking transcription service health: {e}")
+        raise HTTPException(status_code=503, detail={"healthy": False, "error": str(e)})
+
+@app.get("/transcription/job/{job_id}")
+async def get_transcription_job_status(job_id: str):
+    """Get status of a transcription job"""
+    try:
+        job_status = await transcription_service.get_job_status(job_id)
+        if job_status:
+            return job_status
+        else:
+            raise HTTPException(status_code=404, detail="Transcription job not found")
+    except Exception as e:
+        logger.error(f"Error getting job status for {job_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/meetings", response_model=Meeting)
 async def create_meeting(meeting: MeetingCreate):
