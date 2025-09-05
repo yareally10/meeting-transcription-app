@@ -1,33 +1,60 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { meetingApi } from '../services/api';
 
 interface KeywordsManagerProps {
-  meetingId: string;
+  meetingId?: string; // Optional for creation mode
   currentKeywords: string[];
   onKeywordsUpdated: (keywords: string[]) => void;
+  disabled?: boolean;
+  showTitle?: boolean;
 }
 
-export default function KeywordsManager({ meetingId, currentKeywords, onKeywordsUpdated }: KeywordsManagerProps) {
+export default function KeywordsManager({ 
+  meetingId, 
+  currentKeywords, 
+  onKeywordsUpdated, 
+  disabled = false,
+  showTitle = true 
+}: KeywordsManagerProps) {
   const [keywords, setKeywords] = useState<string[]>(currentKeywords);
   const [keywordInput, setKeywordInput] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Update keywords when currentKeywords prop changes
+  useEffect(() => {
+    setKeywords(currentKeywords);
+  }, [currentKeywords]);
 
   const addKeyword = () => {
     if (keywordInput.trim() && !keywords.includes(keywordInput.trim())) {
       const newKeywords = [...keywords, keywordInput.trim()];
       setKeywords(newKeywords);
       setKeywordInput('');
-      updateKeywords(newKeywords);
+      
+      // If meetingId exists, update via API; otherwise just notify parent
+      if (meetingId) {
+        updateKeywords(newKeywords);
+      } else {
+        onKeywordsUpdated(newKeywords);
+      }
     }
   };
 
   const removeKeyword = (keywordToRemove: string) => {
     const newKeywords = keywords.filter(keyword => keyword !== keywordToRemove);
     setKeywords(newKeywords);
-    updateKeywords(newKeywords);
+    
+    // If meetingId exists, update via API; otherwise just notify parent
+    if (meetingId) {
+      updateKeywords(newKeywords);
+    } else {
+      onKeywordsUpdated(newKeywords);
+    }
   };
 
   const updateKeywords = async (newKeywords: string[]) => {
+    if (!meetingId) return;
+    
     setLoading(true);
     try {
       await meetingApi.updateKeywords(meetingId, newKeywords);
@@ -41,20 +68,31 @@ export default function KeywordsManager({ meetingId, currentKeywords, onKeywords
     }
   };
 
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addKeyword();
+    }
+  };
+
   return (
     <div className="keywords-manager">
-      <h4>Keywords</h4>
+      {showTitle && <h4>Keywords</h4>}
       
       <div className="keywords-input">
         <input
           type="text"
           value={keywordInput}
           onChange={(e) => setKeywordInput(e.target.value)}
-          onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addKeyword())}
+          onKeyDown={handleKeyPress}
           placeholder="Add keyword and press Enter"
-          disabled={loading}
+          disabled={loading || disabled}
         />
-        <button type="button" onClick={addKeyword} disabled={loading || !keywordInput.trim()}>
+        <button 
+          type="button" 
+          onClick={addKeyword} 
+          disabled={loading || disabled || !keywordInput.trim()}
+        >
           Add
         </button>
       </div>
@@ -66,7 +104,7 @@ export default function KeywordsManager({ meetingId, currentKeywords, onKeywords
             <button 
               type="button" 
               onClick={() => removeKeyword(keyword)}
-              disabled={loading}
+              disabled={loading || disabled}
             >
               ×
             </button>

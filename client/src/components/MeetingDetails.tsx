@@ -3,6 +3,7 @@ import { meetingApi } from '../services/api';
 import { Meeting } from '../types';
 import AudioRecorder from './AudioRecorder';
 import RealTimeTranscription from './RealTimeTranscription';
+import KeywordsManager from './KeywordsManager';
 
 interface MeetingDetailsProps {
   meetingId: string;
@@ -13,10 +14,6 @@ export default function MeetingDetails({ meetingId, onClose }: MeetingDetailsPro
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editingKeywords, setEditingKeywords] = useState(false);
-  const [keywordInput, setKeywordInput] = useState('');
-  const [localKeywords, setLocalKeywords] = useState<string[]>([]);
-  const [audioStatus, setAudioStatus] = useState<string>('idle');
   const [websocket, setWebsocket] = useState<WebSocket | null>(null);
   const websocketRef = useRef<WebSocket | null>(null);
 
@@ -24,11 +21,6 @@ export default function MeetingDetails({ meetingId, onClose }: MeetingDetailsPro
     loadMeetingDetails();
   }, [meetingId]);
 
-  useEffect(() => {
-    if (meeting) {
-      setLocalKeywords(meeting.keywords || []);
-    }
-  }, [meeting]);
 
   useEffect(() => {
     if (meetingId) {
@@ -129,37 +121,12 @@ export default function MeetingDetails({ meetingId, onClose }: MeetingDetailsPro
     }
   };
 
-  const addKeyword = () => {
-    if (keywordInput.trim() && !localKeywords.includes(keywordInput.trim())) {
-      setLocalKeywords([...localKeywords, keywordInput.trim()]);
-      setKeywordInput('');
+  const handleKeywordsUpdated = (newKeywords: string[]) => {
+    if (meeting) {
+      setMeeting({ ...meeting, keywords: newKeywords });
     }
   };
 
-  const removeKeyword = (keyword: string) => {
-    setLocalKeywords(localKeywords.filter(k => k !== keyword));
-  };
-
-  const saveKeywords = async () => {
-    try {
-      const updatedMeeting = await meetingApi.updateKeywords(meetingId, localKeywords);
-      setMeeting(updatedMeeting);
-      setEditingKeywords(false);
-    } catch (error) {
-      console.error('Failed to update keywords:', error);
-      alert('Failed to update keywords');
-    }
-  };
-
-  const cancelKeywordEdit = () => {
-    setLocalKeywords(meeting?.keywords || []);
-    setKeywordInput('');
-    setEditingKeywords(false);
-  };
-
-  const handleAudioStatusChange = (status: string) => {
-    setAudioStatus(status);
-  };
 
   if (!meetingId) {
     return (
@@ -212,64 +179,18 @@ export default function MeetingDetails({ meetingId, onClose }: MeetingDetailsPro
         )}
 
         <div className="keywords-section">
-          <div className="keywords-header">
-            <h3>Keywords</h3>
-            {!editingKeywords ? (
-              <button onClick={() => setEditingKeywords(true)} className="edit-btn">
-                Edit
-              </button>
-            ) : (
-              <div className="keywords-actions">
-                <button onClick={saveKeywords} className="save-btn">
-                  Save
-                </button>
-                <button onClick={cancelKeywordEdit} className="cancel-btn">
-                  Cancel
-                </button>
-              </div>
-            )}
-          </div>
-          
-          {editingKeywords ? (
-            <div className="keywords-edit">
-              <div className="keywords-input">
-                <input
-                  type="text"
-                  value={keywordInput}
-                  onChange={(e) => setKeywordInput(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addKeyword())}
-                  placeholder="Add keyword and press Enter"
-                />
-                <button type="button" onClick={addKeyword}>Add</button>
-              </div>
-              <div className="keywords-list">
-                {localKeywords.map((keyword) => (
-                  <span key={keyword} className="keyword-tag">
-                    {keyword}
-                    <button type="button" onClick={() => removeKeyword(keyword)}>×</button>
-                  </span>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="keywords-list">
-              {localKeywords.length > 0 ? (
-                localKeywords.map((keyword) => (
-                  <span key={keyword} className="keyword-tag">
-                    {keyword}
-                  </span>
-                ))
-              ) : (
-                <p className="no-keywords">No keywords set</p>
-              )}
-            </div>
-          )}
+          <h3>Keywords</h3>
+          <KeywordsManager
+            meetingId={meetingId}
+            currentKeywords={meeting?.keywords || []}
+            onKeywordsUpdated={handleKeywordsUpdated}
+            showTitle={false}
+          />
         </div>
 
         <AudioRecorder 
           meetingId={meetingId} 
           websocket={websocket}
-          onStatusChange={handleAudioStatusChange}
         />
 
         <RealTimeTranscription meetingId={meetingId} />

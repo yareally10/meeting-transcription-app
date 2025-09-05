@@ -12,6 +12,9 @@ export default function AudioRecorder({ meetingId, websocket, onStatusChange }: 
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunkCountRef = useRef<number>(0);
+  
+  // Audio chunk duration in milliseconds (5 seconds)
+  const CHUNK_DURATION_MS = 5000;
 
   useEffect(() => {
     return () => {
@@ -29,59 +32,6 @@ export default function AudioRecorder({ meetingId, websocket, onStatusChange }: 
     }
   }, [audioStatus, onStatusChange]);
 
-  async function analyzeChunkMetadata(chunk: Blob | ArrayBuffer, isFirstChunk: boolean = false) {
-  return {
-    size: (chunk as Blob).size,
-    type: (chunk as Blob).type,
-    hasValidWebMStructure: await checkWebMStructure(chunk, isFirstChunk),
-    issues: []
-  };
-}
-
-async function checkWebMStructure(chunk: Blob | ArrayBuffer, isFirstChunk: boolean): Promise<boolean> {
-  try {
-    const arrayBuffer = chunk instanceof Blob ? 
-      await chunk.arrayBuffer() : chunk;
-    const data = new Uint8Array(arrayBuffer);
-    
-    if (data.length < 4) return false;
-    
-    if (isFirstChunk) {
-      // First chunk should have EBML header
-      return checkBytes(data, 0, [0x1A, 0x45, 0xDF, 0xA3]);
-    } else {
-      // Subsequent chunks should have Cluster or Segment headers
-      return checkBytes(data, 0, [0x1F, 0x43, 0xB6, 0x75]) || // Cluster
-             checkBytes(data, 0, [0x18, 0x53, 0x80, 0x67]);   // Segment
-    }
-  } catch (error) {
-    return false;
-  }
-}
-
-function checkBytes(data: Uint8Array, offset: number, signature: number[]): boolean {
-  if (offset + signature.length > data.length) return false;
-  return signature.every((byte, index) => 
-    data[offset + index] === byte
-  );
-}
-
-function createWebMHeaders(): Uint8Array {
-  // Create Cluster header (0x1F43B675) and Segment header (0x18538067)
-  const clusterHeader = new Uint8Array([0x1A, 0x45, 0xDF, 0xA3]);
-  const segmentHeader = new Uint8Array([0x93, 0x42, 0x82]);
-  
-  // Combine both headers
-  return combineUint8Arrays(segmentHeader, clusterHeader);
-  //return new Uint8Array([0x1A, 0x45, 0xDF, 0xA3]);
-}
-
-function combineUint8Arrays(array1: Uint8Array, array2: Uint8Array): Uint8Array {
-  const combined = new Uint8Array(array1.length + array2.length);
-  combined.set(array1, 0);
-  combined.set(array2, array1.length);
-  return combined;
-}
 
   const sendAudioChunk = async (chunk: Blob) => {
     if (!websocket || websocket.readyState !== WebSocket.OPEN) {
@@ -91,24 +41,8 @@ function combineUint8Arrays(array1: Uint8Array, array2: Uint8Array): Uint8Array 
     
     try {
       const chunkIndex = chunkCountRef.current++;
-      const isFirstChunk = chunkIndex === 0;
-      
-      let finalChunk = chunk;
-      
-      if (!isFirstChunk) {
-        // For subsequent chunks, prepend the WebM headers
-        const chunkData = new Uint8Array(await chunk.arrayBuffer());
-        const webmHeaders = createWebMHeaders();
-        const combinedData = combineUint8Arrays(webmHeaders, chunkData);
-        finalChunk = new Blob([new Uint8Array(combinedData)], { type: chunk.type });
-        console.log(`🔗 Added WebM headers + chunk: ${webmHeaders.length} + ${chunkData.length} = ${combinedData.length} bytes`);
-      }
-      
-      const metadata = await analyzeChunkMetadata(finalChunk, isFirstChunk);
-      console.log(`📊 Chunk ${chunkIndex}:`, JSON.stringify(metadata));
-      
       websocket.send(chunk);
-      console.log(`✅ Sent audio chunk ${chunkIndex}: ${finalChunk.size} bytes`);
+      console.log(`✅ Sent audio chunk ${chunkIndex}: ${chunk.size} bytes`);
     } catch (error) {
       console.error('❌ Error sending audio chunk:', error);
     }
@@ -155,8 +89,8 @@ function combineUint8Arrays(array1: Uint8Array, array2: Uint8Array): Uint8Array 
         }
       };
       
-      // Generate audio chunks every 5 seconds
-      mediaRecorder.start(5000);
+      // Generate audio chunks using chunk duration
+      mediaRecorder.start(CHUNK_DURATION_MS);
       
     } catch (error) {
       console.error('Failed to start audio recording:', error);

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { meetingApi } from '../services/api';
 import { CreateMeetingRequest } from '../types';
+import KeywordsManager from './KeywordsManager';
 
 interface MeetingFormProps {
   onMeetingCreated: () => void;
@@ -10,18 +11,10 @@ export default function MeetingForm({ onMeetingCreated }: MeetingFormProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [keywords, setKeywords] = useState<string[]>([]);
-  const [keywordInput, setKeywordInput] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const addKeyword = () => {
-    if (keywordInput.trim() && !keywords.includes(keywordInput.trim())) {
-      setKeywords([...keywords, keywordInput.trim()]);
-      setKeywordInput('');
-    }
-  };
-
-  const removeKeyword = (keyword: string) => {
-    setKeywords(keywords.filter(k => k !== keyword));
+  const handleKeywordsUpdated = (newKeywords: string[]) => {
+    setKeywords(newKeywords);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -40,7 +33,6 @@ export default function MeetingForm({ onMeetingCreated }: MeetingFormProps) {
       setTitle('');
       setDescription('');
       setKeywords([]);
-      setKeywordInput('');
       onMeetingCreated();
     } catch (error) {
       console.error('Failed to create meeting:', error);
@@ -79,25 +71,12 @@ export default function MeetingForm({ onMeetingCreated }: MeetingFormProps) {
 
       <div className="form-group">
         <label htmlFor="keywords">Keywords</label>
-        <div className="keywords-input">
-          <input
-            id="keywords"
-            type="text"
-            value={keywordInput}
-            onChange={(e) => setKeywordInput(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addKeyword())}
-            placeholder="Add keyword and press Enter"
-          />
-          <button type="button" onClick={addKeyword}>Add</button>
-        </div>
-        <div className="keywords-list">
-          {keywords.map((keyword) => (
-            <span key={keyword} className="keyword-tag">
-              {keyword}
-              <button type="button" onClick={() => removeKeyword(keyword)}>×</button>
-            </span>
-          ))}
-        </div>
+        <KeywordsManager
+          currentKeywords={keywords}
+          onKeywordsUpdated={handleKeywordsUpdated}
+          disabled={loading}
+          showTitle={false}
+        />
       </div>
 
       <button type="submit" disabled={loading || !title.trim()}>
