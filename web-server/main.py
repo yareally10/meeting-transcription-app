@@ -11,6 +11,7 @@ import logging
 import json
 from audio_service import AudioFileService
 from transcription_service import TranscriptionService
+from websocket_manager import ConnectionManager
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -37,47 +38,12 @@ db = client[DATABASE_NAME]
 # Ensure shared audio directory exists
 os.makedirs(SHARED_AUDIO_PATH, exist_ok=True)
 
-# WebSocket connection manager for real-time notifications
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: Dict[str, WebSocket] = {}
-    
-    async def connect(self, websocket: WebSocket, meeting_id: str):
-        await websocket.accept()
-        self.active_connections[meeting_id] = websocket
-        logger.info(f"WebSocket connected for meeting {meeting_id}")
-    
-    def disconnect(self, meeting_id: str):
-        if meeting_id in self.active_connections:
-            del self.active_connections[meeting_id]
-            logger.info(f"WebSocket disconnected for meeting {meeting_id}")
-    
-    async def send_notification(self, meeting_id: str, notification_type: str, status: str, message: str, data=None):
-        if meeting_id in self.active_connections:
-            try:
-                notification = {
-                    "type": notification_type,
-                    "status": status,
-                    "message": message,
-                    "timestamp": datetime.now(timezone.utc).isoformat()
-                }
-                if data:
-                    notification["data"] = data
-                
-                await self.active_connections[meeting_id].send_text(json.dumps(notification))
-                logger.info(f"Sent notification to meeting {meeting_id}: {message}")
-            except Exception as e:
-                logger.error(f"Failed to send notification to meeting {meeting_id}: {e}")
-                # Remove stale connection
-                self.disconnect(meeting_id)
-
+# Initialize WebSocket connection manager
 manager = ConnectionManager()
 
 # Initialize services
 audio_service = AudioFileService(SHARED_AUDIO_PATH)
 transcription_service = TranscriptionService(TRANSCRIPTION_SERVICE_URL, WEB_SERVER_URL)
-
-
 
 class PyObjectId(str):
     @classmethod
