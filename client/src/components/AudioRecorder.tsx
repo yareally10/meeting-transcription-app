@@ -33,7 +33,7 @@ export default function AudioRecorder({ meetingId, websocket, onStatusChange }: 
   }, [audioStatus, onStatusChange]);
 
 
-  const sendAudioChunk = async (chunk: Blob) => {
+  const sendAudioChunk = (chunk: Blob) => {
     if (!websocket || websocket.readyState !== WebSocket.OPEN) {
       console.log('❌ WebSocket not available');
       return;
@@ -82,10 +82,10 @@ export default function AudioRecorder({ meetingId, websocket, onStatusChange }: 
       });
       mediaRecorderRef.current = mediaRecorder;
       
-      mediaRecorder.ondataavailable = async (event) => {
+      mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           console.log(`📦 Audio chunk received: ${event.data.size} bytes`);
-          await sendAudioChunk(event.data);
+          sendAudioChunk(event.data);
         }
       };
       

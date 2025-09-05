@@ -315,6 +315,21 @@
   color: #333;
 }
 
+.highlighted-keyword {
+  background-color: #ffeb3b;
+  color: #f57c00;
+  font-weight: 600;
+  padding: 2px 4px;
+  border-radius: 3px;
+  box-shadow: 0 1px 3px rgba(255, 235, 59, 0.3);
+  transition: all 0.2s ease;
+}
+
+.highlighted-keyword:hover {
+  background-color: #ffc107;
+  transform: scale(1.02);
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;

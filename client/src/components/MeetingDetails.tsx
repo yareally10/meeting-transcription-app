@@ -193,7 +193,7 @@ export default function MeetingDetails({ meetingId, onClose }: MeetingDetailsPro
           websocket={websocket}
         />
 
-        <RealTimeTranscription meetingId={meetingId} />
+        <RealTimeTranscription meetingId={meetingId} keywords={meeting?.keywords || []} />
 
         {meeting.fullTranscription && (
           <div className="transcription-section">

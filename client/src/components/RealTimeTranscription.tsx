@@ -8,9 +8,10 @@ interface TranscriptionChunk {
 
 interface RealTimeTranscriptionProps {
   meetingId: string;
+  keywords?: string[];
 }
 
-export default function RealTimeTranscription({ meetingId }: RealTimeTranscriptionProps) {
+export default function RealTimeTranscription({ meetingId, keywords = [] }: RealTimeTranscriptionProps) {
   const [chunks, setChunks] = useState<TranscriptionChunk[]>([]);
   const [isActive, setIsActive] = useState(false);
   const transcriptionEndRef = useRef<HTMLDivElement>(null);
@@ -36,6 +37,37 @@ export default function RealTimeTranscription({ meetingId }: RealTimeTranscripti
   const clearTranscription = () => {
     setChunks([]);
     setIsActive(false);
+  };
+
+  const highlightKeywords = (text: string) => {
+    if (!keywords.length) return text;
+
+    // Create a regex pattern for all keywords (case insensitive)
+    const keywordPattern = keywords
+      .map(keyword => keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) // Escape special regex characters
+      .join('|');
+    
+    if (!keywordPattern) return text;
+
+    const regex = new RegExp(`\\b(${keywordPattern})\\b`, 'gi');
+    
+    // Split text by keywords while keeping the keywords
+    const parts = text.split(regex);
+    
+    return parts.map((part, index) => {
+      const isKeyword = keywords.some(keyword => 
+        keyword.toLowerCase() === part.toLowerCase()
+      );
+      
+      if (isKeyword) {
+        return (
+          <span key={index} className="highlighted-keyword">
+            {part}
+          </span>
+        );
+      }
+      return part;
+    });
   };
 
   // Expose the addTranscriptionChunk function globally for this meeting
@@ -78,7 +110,7 @@ export default function RealTimeTranscription({ meetingId }: RealTimeTranscripti
             <span className="transcription-timestamp">
               {chunk.timestamp.toLocaleTimeString()}
             </span>
-            <span className="transcription-text">{chunk.text}</span>
+            <span className="transcription-text">{highlightKeywords(chunk.text)}</span>
           </div>
         ))}
         <div ref={transcriptionEndRef} />
