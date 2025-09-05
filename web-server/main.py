@@ -3,12 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, GetJsonSchemaHandler
 from pydantic.json_schema import JsonSchemaValue
-from typing import List, Optional, Dict
+from typing import List, Optional
 import os
 from datetime import datetime, timezone
 from bson import ObjectId
 import logging
-import json
+from contextlib import asynccontextmanager
 from audio_service import AudioFileService
 from transcription_service import TranscriptionService
 from websocket_manager import ConnectionManager
@@ -16,7 +16,65 @@ from websocket_manager import ConnectionManager
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Meeting Transcription API", version="1.0.0")
+# Constants
+MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
+DATABASE_NAME = "meeting_db"
+SHARED_AUDIO_PATH = "/app/shared_audio"
+TRANSCRIPTION_SERVICE_URL = os.getenv("TRANSCRIPTION_SERVICE_URL", "http://localhost:8001")
+WEB_SERVER_URL = os.getenv("WEB_SERVER_URL", "http://localhost:8000")
+DEFAULT_USER_ID = "user123"  # only have one default user for now
+
+# Global variables - initialized in lifespan
+client: Optional[AsyncIOMotorClient] = None
+db = None
+manager: Optional[ConnectionManager] = None
+audio_service: Optional[AudioFileService] = None
+transcription_service: Optional[TranscriptionService] = None
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Application lifespan manager"""
+    global client, db, manager, audio_service, transcription_service
+    
+    # Startup
+    logger.info("Starting up application...")
+    
+    # Initialize MongoDB connection
+    client = AsyncIOMotorClient(MONGODB_URL)
+    db = client[DATABASE_NAME]
+    
+    try:
+        await client.admin.command('ping')
+        logger.info("Connected to MongoDB successfully")
+    except Exception as e:
+        logger.error(f"Failed to connect to MongoDB: {e}")
+        raise
+    
+    # Ensure shared audio directory exists
+    os.makedirs(SHARED_AUDIO_PATH, exist_ok=True)
+    
+    # Initialize services
+    manager = ConnectionManager()
+    audio_service = AudioFileService(SHARED_AUDIO_PATH)
+    transcription_service = TranscriptionService(TRANSCRIPTION_SERVICE_URL, WEB_SERVER_URL)
+    
+    logger.info("Application startup complete")
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down application...")
+    if client:
+        client.close()
+    logger.info("Application shutdown complete")
+
+
+app = FastAPI(
+    title="Meeting Transcription API", 
+    version="1.0.0",
+    lifespan=lifespan
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -26,32 +84,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
-DATABASE_NAME = "meeting_db"
-SHARED_AUDIO_PATH = "/app/shared_audio"
-TRANSCRIPTION_SERVICE_URL = os.getenv("TRANSCRIPTION_SERVICE_URL", "http://localhost:8001")
-WEB_SERVER_URL = os.getenv("WEB_SERVER_URL", "http://localhost:8000")
-
-client = AsyncIOMotorClient(MONGODB_URL)
-db = client[DATABASE_NAME]
-
-# Ensure shared audio directory exists
-os.makedirs(SHARED_AUDIO_PATH, exist_ok=True)
-
-# Initialize WebSocket connection manager
-manager = ConnectionManager()
-
-# Initialize services
-audio_service = AudioFileService(SHARED_AUDIO_PATH)
-transcription_service = TranscriptionService(TRANSCRIPTION_SERVICE_URL, WEB_SERVER_URL)
-
 class PyObjectId(str):
     @classmethod
     def __get_validators__(cls):
         yield cls.validate
 
     @classmethod
-    def validate(cls, v, validation_info=None):
+    def validate(cls, v, _=None):
         if isinstance(v, ObjectId):
             return str(v)
         if isinstance(v, str):
@@ -81,7 +120,7 @@ class MeetingUpdate(BaseModel):
 
 class Meeting(MeetingBase):
     id: PyObjectId = None
-    createdBy: str = Field("user123", alias="created_by")
+    createdBy: str = Field(DEFAULT_USER_ID, alias="created_by")
     createdAt: datetime = Field(alias="created_at")
     updatedAt: datetime = Field(alias="updated_at")
     status: str = "created"
@@ -109,19 +148,6 @@ class TranscriptionWebhookResult(BaseModel):
     error_message: Optional[str] = None
     processed_at: str
 
-@app.on_event("startup")
-async def startup_db_client():
-    logger.info("Starting up database connection...")
-    try:
-        await client.admin.command('ping')
-        logger.info("Connected to MongoDB successfully")
-    except Exception as e:
-        logger.error(f"Failed to connect to MongoDB: {e}")
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    logger.info("Shutting down database connection...")
-    client.close()
 
 @app.get("/")
 async def root():
@@ -157,11 +183,11 @@ async def get_transcription_job_status(job_id: str):
 @app.post("/meetings", response_model=Meeting)
 async def create_meeting(meeting: MeetingCreate):
     """Create a new meeting"""
-    logger.info(f"Received meeting creation request: {meeting.dict()}")
+    logger.info(f"Received meeting creation request: {meeting.model_dump()}")
     try:
-        meeting_dict = meeting.dict()
+        meeting_dict = meeting.model_dump()
         meeting_dict.update({
-            "created_by": "user123", # only has one user for now
+            "created_by": DEFAULT_USER_ID,
             "created_at": datetime.now(timezone.utc),
             "updated_at": datetime.now(timezone.utc),
             "status": "created",
@@ -190,7 +216,7 @@ async def get_meetings():
     """Get all meetings for the current user"""
     try:
         meetings = []
-        cursor = db.meetings.find({"created_by": "user123"}).sort("created_at", -1)
+        cursor = db.meetings.find({"created_by": DEFAULT_USER_ID}).sort("created_at", -1)
         
         async for meeting in cursor:
             meeting["id"] = str(meeting["_id"])
@@ -198,7 +224,7 @@ async def get_meetings():
         
         logger.info(f"Returning {len(meetings)} meetings to frontend")
         if meetings:
-            logger.info(f"Sample meeting data: {meetings[0].dict()}")
+            logger.info(f"Sample meeting data: {meetings[0].model_dump()}")
         return meetings
     except Exception as e:
         logger.error(f"Error fetching meetings: {e}")
@@ -231,7 +257,7 @@ async def update_meeting(meeting_id: str, meeting_update: MeetingUpdate):
         if not ObjectId.is_valid(meeting_id):
             raise HTTPException(status_code=400, detail="Invalid meeting ID")
         
-        update_data = {k: v for k, v in meeting_update.dict().items() if v is not None}
+        update_data = {k: v for k, v in meeting_update.model_dump().items() if v is not None}
         if not update_data:
             raise HTTPException(status_code=400, detail="No valid update data provided")
         

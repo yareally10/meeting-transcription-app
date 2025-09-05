@@ -11,7 +11,7 @@ class AudioFileService:
     """Service to handle audio file operations for meetings"""
     
     # Class constants
-    CHUNK_DURATION_MILISECONDS = 5000
+    CHUNK_DURATION_MILLISECONDS = 5000
     PROCESSED_FOLDER_NAME = "processed"
     
     def __init__(self, base_path: str):
@@ -73,14 +73,14 @@ class AudioFileService:
         processed_dir.mkdir(parents=True, exist_ok=True)
         return processed_dir
     
-    async def slice_next_unprocessed_chunk(self, meeting_id: str, duration_miliseconds: Optional[float] = None) -> Optional[Dict[str, Any]]:
+    async def slice_next_unprocessed_chunk(self, meeting_id: str, duration_milliseconds: Optional[float] = None) -> Optional[Dict[str, Any]]:
         """
         Slice the next unprocessed chunk from the raw.webm file
         Tracks position to avoid overlap and ensure all audio is processed
         """
         try:
-            if duration_miliseconds is None:
-                duration_miliseconds = self.CHUNK_DURATION_MILISECONDS
+            if duration_milliseconds is None:
+                duration_milliseconds = self.CHUNK_DURATION_MILLISECONDS
                 
             # Get paths
             raw_file_path = self.get_meeting_audio_path(meeting_id)
@@ -105,7 +105,7 @@ class AudioFileService:
                 return None
             
             # Determine chunk duration (might be less than requested if near end)
-            actual_chunk_duration = min(duration_miliseconds / 1000, remaining_duration)
+            actual_chunk_duration = min(duration_milliseconds / 1000, remaining_duration)
             
             # Extract the chunk
             start_time_ms = int(last_position * 1000)
@@ -130,7 +130,7 @@ class AudioFileService:
             result = {
                 "chunk_file_path": str(chunk_file_path),
                 "chunk_filename": chunk_filename,
-                "requested_duration_seconds": duration_miliseconds / 1000,
+                "requested_duration_seconds": duration_milliseconds / 1000,
                 "actual_duration_seconds": actual_chunk_duration,
                 "chunk_size_bytes": chunk_stats.st_size,
                 "original_audio_duration_seconds": audio_duration_seconds,
