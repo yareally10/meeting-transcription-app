@@ -11,7 +11,7 @@ class AudioFileService:
     """Service to handle audio file operations for meetings"""
     
     # Class constants
-    CHUNK_DURATION_SECONDS = 5.0
+    CHUNK_DURATION_MILISECONDS = 5000
     PROCESSED_FOLDER_NAME = "processed"
     
     def __init__(self, base_path: str):
@@ -144,80 +144,14 @@ class AudioFileService:
         processed_dir.mkdir(parents=True, exist_ok=True)
         return processed_dir
     
-    async def slice_last_seconds(self, meeting_id: str, duration_seconds: Optional[float] = None) -> Optional[Dict[str, Any]]:
-        """
-        Slice the last N seconds from the raw.webm file and save to processed folder
-        Returns info about the sliced chunk if successful, None if failed
-        """
-        try:
-            if duration_seconds is None:
-                duration_seconds = self.CHUNK_DURATION_SECONDS
-                
-            # Get paths
-            raw_file_path = self.get_meeting_audio_path(meeting_id)
-            processed_dir = self.get_processed_directory(meeting_id)
-            
-            # Check if raw file exists
-            if not raw_file_path.exists():
-                logger.warning(f"Raw audio file does not exist: {raw_file_path}")
-                return None
-            
-            # Generate timestamp filename
-            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
-            chunk_filename = f"chunk_{timestamp}.webm"
-            chunk_file_path = processed_dir / chunk_filename
-            
-            logger.info(f"Slicing last {duration_seconds}s from {raw_file_path}")
-            
-            # Load the audio file
-            audio = AudioSegment.from_file(str(raw_file_path), format="webm")
-            
-            # Check if audio is long enough
-            audio_duration_ms = len(audio)
-            audio_duration_seconds = audio_duration_ms / 1000.0
-            
-            if audio_duration_seconds < duration_seconds:
-                logger.warning(f"Audio file is only {audio_duration_seconds:.2f}s long, shorter than requested {duration_seconds}s")
-                # Take the entire audio if it's shorter than requested duration
-                chunk = audio
-                actual_duration = audio_duration_seconds
-            else:
-                # Extract the last N seconds
-                start_time_ms = audio_duration_ms - (duration_seconds * 1000)
-                chunk = audio[start_time_ms:]
-                actual_duration = duration_seconds
-            
-            # Save the chunk as WebM
-            chunk.export(str(chunk_file_path), format="webm")
-            
-            # Get file stats
-            chunk_stats = chunk_file_path.stat()
-            
-            result = {
-                "chunk_file_path": str(chunk_file_path),
-                "chunk_filename": chunk_filename,
-                "requested_duration_seconds": duration_seconds,
-                "actual_duration_seconds": actual_duration,
-                "chunk_size_bytes": chunk_stats.st_size,
-                "original_audio_duration_seconds": audio_duration_seconds,
-                "timestamp": timestamp
-            }
-            
-            logger.info(f"Successfully sliced {actual_duration:.2f}s chunk to {chunk_file_path} ({chunk_stats.st_size} bytes)")
-            return result
-            
-        except Exception as e:
-            logger.error(f"Error slicing audio for meeting {meeting_id}: {e}")
-            return None
-    
-    async def slice_next_unprocessed_chunk(self, meeting_id: str, duration_seconds: Optional[float] = None) -> Optional[Dict[str, Any]]:
+    async def slice_next_unprocessed_chunk(self, meeting_id: str, duration_miliseconds: Optional[float] = None) -> Optional[Dict[str, Any]]:
         """
         Slice the next unprocessed chunk from the raw.webm file
         Tracks position to avoid overlap and ensure all audio is processed
         """
         try:
-            if duration_seconds is None:
-                duration_seconds = self.CHUNK_DURATION_SECONDS
+            if duration_miliseconds is None:
+                duration_miliseconds = self.CHUNK_DURATION_MILISECONDS
                 
             # Get paths
             raw_file_path = self.get_meeting_audio_path(meeting_id)
@@ -242,7 +176,7 @@ class AudioFileService:
                 return None
             
             # Determine chunk duration (might be less than requested if near end)
-            actual_chunk_duration = min(duration_seconds, remaining_duration)
+            actual_chunk_duration = min(duration_miliseconds / 1000, remaining_duration)
             
             # Extract the chunk
             start_time_ms = int(last_position * 1000)
@@ -267,7 +201,7 @@ class AudioFileService:
             result = {
                 "chunk_file_path": str(chunk_file_path),
                 "chunk_filename": chunk_filename,
-                "requested_duration_seconds": duration_seconds,
+                "requested_duration_seconds": duration_miliseconds / 1000,
                 "actual_duration_seconds": actual_chunk_duration,
                 "chunk_size_bytes": chunk_stats.st_size,
                 "original_audio_duration_seconds": audio_duration_seconds,
@@ -289,25 +223,3 @@ class AudioFileService:
         if meeting_id in self.last_processed_position:
             del self.last_processed_position[meeting_id]
             logger.info(f"Reset processing position for meeting {meeting_id}")
-    
-    async def process_remaining_audio(self, meeting_id: str) -> List[Dict[str, Any]]:
-        """
-        Process all remaining unprocessed audio when recording stops
-        Returns list of processed chunks
-        """
-        chunks = []
-        logger.info(f"Processing remaining audio for meeting {meeting_id}")
-        
-        while True:
-            chunk_result = await self.slice_next_unprocessed_chunk(meeting_id)
-            if chunk_result is None:
-                break
-            chunks.append(chunk_result)
-            
-            # Safety check to avoid infinite loop
-            if len(chunks) > 100:  # Max 100 chunks = 500 seconds = 8+ minutes
-                logger.warning(f"Processed {len(chunks)} chunks, stopping to avoid infinite loop")
-                break
-        
-        logger.info(f"Finished processing remaining audio: {len(chunks)} chunks created")
-        return chunks

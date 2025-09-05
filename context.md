@@ -36,26 +36,22 @@ Client ↔ Web Server ← Transcription Service → OpenAI Whisper
 - **Responsibilities**:
   - **EXCLUSIVE MongoDB access** - only service that can read/write database
   - Meeting CRUD API endpoints
-  - User authentication and authorization
-  - Audio chunk upload handling
+  - Audio chunk upload handling (saving audio files to shared volume with Transcription Service Container)
   - Forward audio chunks to Transcription Service
   - Receive webhook results from Transcription Service
   - Save transcription results to MongoDB
   - WebSocket management for real-time client updates
-  - Keyword management API endpoints
-  - Meeting status tracking and updates
 
 ### 3. Transcription Service Container
 - **Technology**: FastAPI with internal queue management
 - **Port**: 8001
 - **Responsibilities**:
   - **STATELESS processing service** - no database access
-  - Internal queue management (threading-based, no Redis)
+  - Internal queue management (threading-based, no Redis for simplicity)
   - Audio processing and optimization
   - OpenAI Whisper API integration
   - Background worker thread management
   - Webhook delivery to Web Server with results
-  - File storage and cleanup management
   - **NO knowledge of meetings, users, or persistent data**
 
 ### 4. MongoDB Container
@@ -64,9 +60,8 @@ Client ↔ Web Server ← Transcription Service → OpenAI Whisper
 - **Responsibilities**:
   - Meeting metadata persistence
   - Transcription result storage
-  - User data and authentication
-  - Keyword and tag management
-  - Meeting history and analytics data
+  - Keyword management
+  - User data (not currently used)
 
 ## Critical Architecture Rules
 
@@ -78,10 +73,9 @@ Client ↔ Web Server ← Transcription Service → OpenAI Whisper
 
 ### Service Communication Patterns
 - **Client → Web Server**: HTTP REST APIs + WebSocket
-- **Web Server → Transcription Service**: HTTP POST (chunk forwarding)
+- **Web Server → Transcription Service**: HTTP POST (push transcription requests onto queue)
 - **Transcription Service → Web Server**: HTTP POST webhooks (results)
 - **Web Server → MongoDB**: Direct database operations
-- **NO direct service-to-service database sharing**
 
 ## Data Models
 
@@ -95,33 +89,8 @@ Client ↔ Web Server ← Transcription Service → OpenAI Whisper
   createdAt: Date,
   updatedAt: Date,
   status: String, // "created", "uploading", "transcribing", "completed", "failed"
-  audioFile: {
-    originalFilename: String,
-    size: Number,
-    duration: Number,
-    uploadedAt: Date,
-    chunks: [{
-      chunkIndex: Number,
-      startTime: Number,
-      endTime: Number,
-      status: String, // "queued", "processing", "completed", "failed"
-      transcriptionText: String,
-      confidence: Number,
-      processingTime: Number,
-      processedAt: Date,
-      transcriptionServiceJobId: String
-    }]
-  },
   keywords: [String], // User-managed keywords
   fullTranscription: String, // Combined from all chunks
-  metadata: {
-    language: String,
-    participants: [String],
-    totalDuration: Number,
-    processingStarted: Date,
-    processingCompleted: Date,
-    totalProcessingTime: Number
-  }
 }
 ```
 
