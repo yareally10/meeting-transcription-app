@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { meetingApi } from '../services/api';
 import { Meeting } from '../types';
 import AudioRecorder from './AudioRecorder';
+import RealTimeTranscription from './RealTimeTranscription';
 
 interface MeetingDetailsProps {
   meetingId: string;
@@ -16,6 +17,8 @@ export default function MeetingDetails({ meetingId, onClose }: MeetingDetailsPro
   const [keywordInput, setKeywordInput] = useState('');
   const [localKeywords, setLocalKeywords] = useState<string[]>([]);
   const [audioStatus, setAudioStatus] = useState<string>('idle');
+  const [websocket, setWebsocket] = useState<WebSocket | null>(null);
+  const websocketRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     loadMeetingDetails();
@@ -26,6 +29,85 @@ export default function MeetingDetails({ meetingId, onClose }: MeetingDetailsPro
       setLocalKeywords(meeting.keywords || []);
     }
   }, [meeting]);
+
+  useEffect(() => {
+    if (meetingId) {
+      connectWebSocket();
+    }
+
+    // Add event listener for window close/refresh
+    const handleBeforeUnload = () => {
+      if (websocketRef.current) {
+        websocketRef.current.close();
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      if (websocketRef.current) {
+        websocketRef.current.close();
+      }
+    };
+  }, [meetingId]);
+
+  const connectWebSocket = () => {
+    if (websocketRef.current) {
+      websocketRef.current.close();
+    }
+
+    const wsUrl = `${(import.meta as any).env.VITE_WS_URL || 'ws://localhost:8000'}/ws/meeting/${meetingId}/audio`;
+    const ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      console.log('WebSocket connected');
+    };
+
+    ws.onmessage = (event) => {
+      // Skip processing if the message is binary data (audio chunks)
+      if (event.data instanceof ArrayBuffer || event.data instanceof Blob) {
+        return;
+      }
+
+      // Only process text messages that should be JSON
+      if (typeof event.data === 'string') {
+        try {
+          const data = JSON.parse(event.data);
+          
+          if (data.type === 'transcription_status' && data.status === 'completed' && data.data?.full_text) {
+            // Call the global function that RealTimeTranscription component expects
+            const addTranscriptionFunction = (window as any)[`addRealTimeTranscription_${meetingId}`];
+            if (addTranscriptionFunction) {
+              addTranscriptionFunction(data.data.full_text);
+            }
+            console.log('📝 Transcription received:', data.data.full_text);
+          }
+          
+          // Log all transcription status messages for debugging
+          if (data.type === 'transcription_status') {
+            console.log(`📡 Transcription status: ${data.status} - ${data.message}`);
+          }
+        } catch (error) {
+          // Only log error for strings that should be JSON but aren't
+          if (event.data.startsWith('{') || event.data.startsWith('[')) {
+            console.error('Error parsing WebSocket JSON message:', error);
+          }
+        }
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
+
+    ws.onclose = (event) => {
+      console.log('WebSocket closed:', event.code, event.reason);
+    };
+
+    websocketRef.current = ws;
+    setWebsocket(ws);
+  };
 
 
   const loadMeetingDetails = async () => {
@@ -186,8 +268,11 @@ export default function MeetingDetails({ meetingId, onClose }: MeetingDetailsPro
 
         <AudioRecorder 
           meetingId={meetingId} 
+          websocket={websocket}
           onStatusChange={handleAudioStatusChange}
         />
+
+        <RealTimeTranscription meetingId={meetingId} />
 
         {meeting.fullTranscription && (
           <div className="transcription-section">

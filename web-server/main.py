@@ -2,14 +2,15 @@ from fastapi import FastAPI, HTTPException, Depends, WebSocket, WebSocketDisconn
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict
 import os
 import asyncio
-from pathlib import Path
 from datetime import datetime, timezone
 from bson import ObjectId
 import logging
-import httpx
+import json
+from audio_service import AudioFileService
+from transcription_service import TranscriptionService
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -36,66 +37,47 @@ db = client[DATABASE_NAME]
 # Ensure shared audio directory exists
 os.makedirs(SHARED_AUDIO_PATH, exist_ok=True)
 
-async def save_audio_chunk(meeting_id: str, audio_data: bytes) -> str:
-    """
-    Save audio chunk to shared volume with meeting-specific folder and UTC timestamp filename
-    Returns the saved file path
-    """
-    try:
-        # Create meeting-specific directory with raw subfolder
-        meeting_dir = Path(SHARED_AUDIO_PATH) / meeting_id
-        raw_dir = meeting_dir / "raw"
-        raw_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Generate UTC timestamp filename
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
-        filename = f"{timestamp}.webm"
-        file_path = raw_dir / filename
-        
-        # Save audio chunk
-        with open(file_path, "wb") as f:
-            f.write(audio_data)
-        
-        logger.info(f"Saved audio chunk: {file_path} ({len(audio_data)} bytes)")
-        return str(file_path)
-        
-    except Exception as e:
-        logger.error(f"Error saving audio chunk for meeting {meeting_id}: {e}")
-        raise
-
-async def send_to_transcription_service(meeting_id: str, filename: str) -> Optional[str]:
-    """
-    Send audio file to transcription service for processing
-    Returns job_id if successful, None if failed
-    """
-    try:
-        webhook_url = f"{WEB_SERVER_URL}/webhook/transcription-completed"
-        
-        request_data = {
-            "meeting_id": meeting_id,
-            "filename": filename,
-            "webhook_url": webhook_url
-        }
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{TRANSCRIPTION_SERVICE_URL}/transcribe",
-                json=request_data,
-                timeout=30.0
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                job_id = result.get("job_id")
-                logger.info(f"Successfully queued transcription job {job_id} for meeting {meeting_id}, file {filename}")
-                return job_id
-            else:
-                logger.error(f"Transcription service error: {response.status_code} - {response.text}")
-                return None
+# WebSocket connection manager for real-time notifications
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Dict[str, WebSocket] = {}
+    
+    async def connect(self, websocket: WebSocket, meeting_id: str):
+        await websocket.accept()
+        self.active_connections[meeting_id] = websocket
+        logger.info(f"WebSocket connected for meeting {meeting_id}")
+    
+    def disconnect(self, meeting_id: str):
+        if meeting_id in self.active_connections:
+            del self.active_connections[meeting_id]
+            logger.info(f"WebSocket disconnected for meeting {meeting_id}")
+    
+    async def send_notification(self, meeting_id: str, notification_type: str, status: str, message: str, data=None):
+        if meeting_id in self.active_connections:
+            try:
+                notification = {
+                    "type": notification_type,
+                    "status": status,
+                    "message": message,
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                }
+                if data:
+                    notification["data"] = data
                 
-    except Exception as e:
-        logger.error(f"Error sending to transcription service: {e}")
-        return None
+                await self.active_connections[meeting_id].send_text(json.dumps(notification))
+                logger.info(f"Sent notification to meeting {meeting_id}: {message}")
+            except Exception as e:
+                logger.error(f"Failed to send notification to meeting {meeting_id}: {e}")
+                # Remove stale connection
+                self.disconnect(meeting_id)
+
+manager = ConnectionManager()
+
+# Initialize services
+audio_service = AudioFileService(SHARED_AUDIO_PATH)
+transcription_service = TranscriptionService(TRANSCRIPTION_SERVICE_URL, WEB_SERVER_URL)
+
+
 
 class PyObjectId(ObjectId):
     @classmethod
@@ -365,14 +347,32 @@ async def transcription_webhook(result: TranscriptionWebhookResult):
                 )
                 
                 logger.info(f"Updated meeting {result.meeting_id} with transcription from {result.filename}")
+                
+                # Send success notification with full transcription text
+                await manager.send_notification(
+                    result.meeting_id, 
+                    "transcription_status", 
+                    "completed", 
+                    f"Transcription completed for audio chunk ({result.filename})",
+                    {
+                        "text_snippet": result.transcription_text[:100] + "..." if len(result.transcription_text) > 100 else result.transcription_text,
+                        "full_text": result.transcription_text
+                    }
+                )
             else:
                 logger.warning(f"No transcription text received for file {result.filename}")
+                await manager.send_notification(result.meeting_id, "transcription_status", "warning", f"No transcription text received for {result.filename}")
                 
         elif result.status == "failed":
             logger.error(f"Transcription failed for meeting {result.meeting_id}, file {result.filename}: {result.error_message}")
             
-            # Optionally update meeting status or add error info
-            # For now, we'll just log the error
+            # Send error notification
+            await manager.send_notification(
+                result.meeting_id, 
+                "transcription_status", 
+                "failed", 
+                f"Transcription failed for {result.filename}: {result.error_message or 'Unknown error'}"
+            )
         
         return {"status": "success", "message": "Webhook processed"}
         
@@ -385,8 +385,7 @@ async def transcription_webhook(result: TranscriptionWebhookResult):
 @app.websocket("/ws/meeting/{meeting_id}/audio")
 async def websocket_audio_endpoint(websocket: WebSocket, meeting_id: str):
     """WebSocket endpoint for audio streaming and real-time transcription"""
-    await websocket.accept()
-    logger.info(f"WebSocket connection established for meeting {meeting_id}")
+    await manager.connect(websocket, meeting_id)
     
     try:
         # Validate meeting exists
@@ -410,7 +409,11 @@ async def websocket_audio_endpoint(websocket: WebSocket, meeting_id: str):
             }}
         )
         
-        await websocket.send_text("Connected: Ready to receive audio")
+        # Reset audio processing position for new recording session
+        audio_service.reset_processing_position(meeting_id)
+        
+        # Send initial connection notification
+        await manager.send_notification(meeting_id, "transcription_status", "connected", "Connected: Ready to receive audio")
         
         while True:
             # Receive audio data from client
@@ -419,25 +422,39 @@ async def websocket_audio_endpoint(websocket: WebSocket, meeting_id: str):
             # Log received audio chunk
             logger.info(f"Received audio chunk of {len(data)} bytes for meeting {meeting_id}")
             
-            # Save audio chunk to shared volume
+            # Save audio chunk using audio service
             try:
-                saved_file_path = await save_audio_chunk(meeting_id, data)
-                filename = Path(saved_file_path).name
-                await websocket.send_text(f"Audio chunk saved: {saved_file_path}")
+                result = await audio_service.append_audio_chunk(meeting_id, data)
+                await websocket.send_text(f"Audio chunk saved: {result['file_path']}")
+
+                # chunk the raw audio file using position tracking
+                chunk_result = await audio_service.slice_next_unprocessed_chunk(meeting_id)
+                if chunk_result:
+                    logger.info(f"Created audio chunk: {chunk_result['chunk_filename']} ({chunk_result['actual_duration_seconds']:.2f}s, {chunk_result['remaining_audio_seconds']:.2f}s remaining)")
+
+                # send chunk to transcription service
+                if chunk_result:
+                    job_id = await transcription_service.submit_transcription_job(meeting_id, chunk_result['chunk_filename'])
+                    if job_id:
+                        logger.info(f"Submitted transcription job {job_id} for chunk {chunk_result['chunk_filename']}")
+                        await manager.send_notification(meeting_id, "transcription_status", "processing", f"Transcription job {job_id} submitted for {chunk_result['chunk_filename']}")
+                    else:
+                        await manager.send_notification(meeting_id, "transcription_status", "error", f"Failed to submit transcription job for {chunk_result['chunk_filename']}")
                 
-                # Send to transcription service
-                job_id = await send_to_transcription_service(meeting_id, filename)
-                if job_id:
-                    await websocket.send_text(f"Transcription queued with job ID: {job_id}")
-                else:
-                    await websocket.send_text("Warning: Failed to queue transcription")
+                # Send notification about chunk being appended
+                await manager.send_notification(
+                    meeting_id, 
+                    "transcription_status", 
+                    "processing", 
+                    f"Audio chunk {'added to new file' if result['is_first_chunk'] else 'appended'} ({result['chunk_size']} bytes, total: {result['total_file_size']} bytes)"
+                )
                     
             except Exception as e:
                 logger.error(f"Failed to save audio chunk: {e}")
-                await websocket.send_text(f"Error saving audio chunk: {str(e)}")
+                await manager.send_notification(meeting_id, "transcription_status", "error", f"Error processing audio chunk: {str(e)}")
             
     except WebSocketDisconnect:
-        logger.info(f"WebSocket disconnected for meeting {meeting_id}")
+        manager.disconnect(meeting_id)
         
         # Update meeting status back to created when disconnected
         try:
@@ -453,6 +470,7 @@ async def websocket_audio_endpoint(websocket: WebSocket, meeting_id: str):
             
     except Exception as e:
         logger.error(f"WebSocket error for meeting {meeting_id}: {e}")
+        manager.disconnect(meeting_id)
         try:
             await websocket.send_text(f"Error: {str(e)}")
             await websocket.close()

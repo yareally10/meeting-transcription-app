@@ -90,8 +90,8 @@ def process_transcription_job(job_data: Dict[str, Any]):
     start_time = datetime.now()
     
     try:
-        # Build file path
-        audio_file_path = Path(SHARED_AUDIO_PATH) / meeting_id / "raw" / filename
+        # Build file path - files are now in processed folder
+        audio_file_path = Path(SHARED_AUDIO_PATH) / meeting_id / "processed" / filename
         
         if not audio_file_path.exists():
             raise Exception(f"Audio file not found: {audio_file_path}")
@@ -209,8 +209,8 @@ async def transcribe_audio_file(request: TranscriptionRequest):
     if not OPENAI_API_KEY:
         raise HTTPException(status_code=500, detail="OpenAI API key not configured")
     
-    # Check if audio file exists
-    audio_file_path = Path(SHARED_AUDIO_PATH) / request.meeting_id / "raw" / request.filename
+    # Check if audio file exists - files are now in processed folder
+    audio_file_path = Path(SHARED_AUDIO_PATH) / request.meeting_id / "processed" / request.filename
     if not audio_file_path.exists():
         raise HTTPException(status_code=404, detail=f"Audio file not found: {request.filename}")
     
