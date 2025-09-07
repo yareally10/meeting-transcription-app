@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { matchKeywords } from '../services/keywordMatcher';
 
 interface TranscriptionChunk {
   id: string;
@@ -40,33 +41,17 @@ export default function RealTimeTranscription({ meetingId, keywords = [] }: Real
   };
 
   const highlightKeywords = (text: string) => {
-    if (!keywords.length) return text;
-
-    // Create a regex pattern for all keywords (case insensitive)
-    const keywordPattern = keywords
-      .map(keyword => keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) // Escape special regex characters
-      .join('|');
+    const matches = matchKeywords(keywords, text);
     
-    if (!keywordPattern) return text;
-
-    const regex = new RegExp(`\\b(${keywordPattern})\\b`, 'gi');
-    
-    // Split text by keywords while keeping the keywords
-    const parts = text.split(regex);
-    
-    return parts.map((part, index) => {
-      const isKeyword = keywords.some(keyword => 
-        keyword.toLowerCase() === part.toLowerCase()
-      );
-      
-      if (isKeyword) {
+    return matches.map((match, index) => {
+      if (match.isKeyword) {
         return (
           <span key={index} className="highlighted-keyword">
-            {part}
+            {match.text}
           </span>
         );
       }
-      return part;
+      return match.text;
     });
   };
 
