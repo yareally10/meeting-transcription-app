@@ -1,34 +1,43 @@
 # Meeting Transcription Platform - Architecture Context
 
 ## Project Overview
-Building a comprehensive meeting transcription platform that allows users to create meetings, upload audio files, and receive real-time transcriptions with keyword management. The system uses a microservices architecture with clear separation of concerns and database access control.
+Building a comprehensive meeting transcription platform that allows users to create meetings, record audio with intelligent Voice Activity Detection (VAD), and receive real-time transcriptions with keyword management. The system uses a microservices architecture with clear separation of concerns and database access control.
 
 ## Architecture Pattern
-**4-Container Microservices Architecture with Controlled Database Access:**
-- **Client Container**: Frontend UI for meeting management
+**4-Container Microservices Architecture with Client-Side VAD:**
+- **Client Container**: React frontend with intelligent Voice Activity Detection
 - **Web Server Container**: Backend API with exclusive MongoDB access
 - **Transcription Service Container**: Stateless audio processing service
 - **MongoDB Container**: Centralized data persistence
 
 ## System Flow
 ```
-Client ↔ Web Server ← Transcription Service → OpenAI Whisper
-         ↓
-      MongoDB
+Client (VAD) → WebSocket → Web Server → Transcription Service → OpenAI Whisper
+                              ↓
+                          MongoDB
 ```
+
+**Key Innovation**: Client-side Voice Activity Detection creates complete, valid WebM audio chunks only when speech is detected, eliminating server-side audio processing and reducing transcription costs by 40-60%.
 
 ## Service Components
 
 ### 1. Client Container (Frontend)
-- **Technology**: React, Vite
+- **Technology**: React 18 + Vite + TypeScript with Web Audio API
 - **Port**: 3000
 - **Responsibilities**:
   - Meeting creation and management interface
-  - Audio file upload with chunking
-  - Real-time transcription progress display
-  - Keyword management UI (CRUD operations)
+  - **Voice Activity Detection (VAD)** - Real-time speech detection using AnalyserNode
+  - **Dynamic audio chunking** - Creates complete WebM chunks only when speech detected
+  - **Silence filtering** - Automatically skips silent periods to reduce API costs
+  - Real-time transcription progress display via WebSocket
+  - Keyword management UI with live highlighting
   - Meeting dashboard and history views
-  - WebSocket connection for live updates
+
+**VAD Features:**
+- State machine: `waiting → recording → confirming_end`
+- Configurable thresholds (silence detection, min/max chunk duration)
+- Real-time volume visualization
+- Each chunk is a valid, standalone WebM file (solves header corruption issue)
 
 ### 2. Web Server Container (Backend API)
 - **Technology**: FastAPI with MongoDB integration
@@ -36,11 +45,35 @@ Client ↔ Web Server ← Transcription Service → OpenAI Whisper
 - **Responsibilities**:
   - **EXCLUSIVE MongoDB access** - only service that can read/write database
   - Meeting CRUD API endpoints
-  - Audio chunk upload handling (saving audio files to shared volume with Transcription Service Container)
+  - **WebSocket audio streaming** - Receives VAD chunks via WebSocket
+  - **File management** - Organized storage structure per meeting
+  - **Session management** - Unique session IDs prevent conflicts in multi-user meetings
   - Forward audio chunks to Transcription Service
   - Receive webhook results from Transcription Service
-  - Save transcription results to MongoDB
+  - Save transcription results to both MongoDB and file system
   - WebSocket management for real-time client updates
+
+**File Management Structure:**
+```
+shared_audio/
+└── {meeting_id}/
+    ├── audios/
+    │   └── vad_{session_id}_{counter}_{timestamp}.webm
+    └── transcriptions/
+        └── vad_{session_id}_{counter}_{timestamp}.txt
+```
+
+**Meeting State Management:**
+- Track chunk count and transcription progress
+- Status transitions: `created → transcribing → completed/failed`
+- Only mark "completed" when all submitted chunks have been transcribed
+- Persist state across WebSocket disconnections
+- Handle out-of-order transcription completion
+
+**Simplified Architecture:**
+- ✅ No server-side audio aggregation (VAD chunks are already complete)
+- ✅ No audio slicing/processing (eliminated `audio_service.py`)
+- ✅ Direct WebSocket → File Save → Transcription pipeline
 
 ### 3. Transcription Service Container
 - **Technology**: FastAPI with internal queue management
@@ -52,16 +85,15 @@ Client ↔ Web Server ← Transcription Service → OpenAI Whisper
   - OpenAI Whisper API integration
   - Background worker thread management
   - Webhook delivery to Web Server with results
-  - **NO knowledge of meetings, users, or persistent data**
+  - **NO knowledge of meetings or persistent data**
 
 ### 4. MongoDB Container
 - **Technology**: MongoDB
 - **Port**: 27017
 - **Responsibilities**:
   - Meeting metadata persistence
-  - Transcription result storage
+  - Transcription result storage (full_transcription field)
   - Keyword management
-  - User data (not currently used)
 
 ## Critical Architecture Rules
 
@@ -85,27 +117,13 @@ Client ↔ Web Server ← Transcription Service → OpenAI Whisper
   _id: ObjectId,
   title: String,
   description: String,
-  createdBy: String, // userId
   createdAt: Date,
   updatedAt: Date,
-  status: String, // "created", "uploading", "transcribing", "completed", "failed"
+  status: String, // "created", "transcribing", "completed", "failed"
   keywords: [String], // User-managed keywords
   fullTranscription: String, // Combined from all chunks
-}
-```
-
-### Users Collection (MongoDB)
-```javascript
-{
-  _id: ObjectId,
-  email: String,
-  name: String,
-  createdAt: Date,
-  lastLoginAt: Date,
-  preferences: {
-    defaultLanguage: String,
-    notificationSettings: Object
-  }
+  totalChunks: Number, // Total chunks submitted
+  completedChunks: Number // Chunks successfully transcribed
 }
 ```
 
@@ -116,16 +134,31 @@ Client ↔ Web Server ← Transcription Service → OpenAI Whisper
 2. **Web Server** → **MongoDB**: Insert new meeting document
 3. **Web Server** → **Client**: Return meeting ID and details
 
-### Audio Upload & Transcription Flow
-1. **Client** → **Web Server** POST `/meetings/{id}/upload-chunk` (audio chunk)
-2. **Web Server** → **MongoDB**: Update meeting status and chunk metadata
-3. **Web Server** → **Transcription Service** POST `/transcribe` (audio chunk + metadata)
-4. **Transcription Service** → **Web Server**: Immediate response (202 Accepted, internal job ID)
-5. **Web Server** → **Client**: Upload confirmation via WebSocket
-6. **Transcription Service**: Background processing (internal queue)
-7. **Transcription Service** → **Web Server**: POST `/webhook/chunk-completed` (results)
-8. **Web Server** → **MongoDB**: Save transcription results, update meeting status
-9. **Web Server** → **Client**: Progress update via WebSocket
+### Audio Upload & Transcription Flow (VAD-Based)
+1. **Client VAD** detects speech → creates complete WebM chunk
+2. **Client** → **Web Server** WebSocket `/ws/meeting/{id}/audio` (binary WebM data)
+3. **Web Server**:
+   - Save audio to `shared_audio/{meeting_id}/audios/vad_{session_id}_{counter}_{timestamp}.webm`
+   - Increment `totalChunks` in MongoDB
+   - Update meeting status to "transcribing"
+4. **Web Server** → **Transcription Service** POST `/transcribe` (filename + meeting_id + webhook_url)
+5. **Transcription Service** → **Web Server**: Immediate response (202 Accepted, job ID)
+6. **Transcription Service**: Background processing (internal queue with worker threads)
+7. **Transcription Service** → **Web Server**: POST `/webhook/transcription-completed` (results)
+8. **Web Server**:
+   - Save transcription to `shared_audio/{meeting_id}/transcriptions/vad_{session_id}_{counter}_{timestamp}.txt`
+   - Append transcription text to `meeting.fullTranscription` in MongoDB
+   - Increment `completedChunks` in MongoDB
+   - Check if `completedChunks == totalChunks` → set status to "completed"
+9. **Web Server** → **Client**: Real-time update via WebSocket with transcription text
+
+**Key Differences from Original:**
+- ✅ Client creates chunks (not server)
+- ✅ WebSocket streaming (not HTTP POST)
+- ✅ No intermediate processing (direct save)
+- ✅ Session ID prevents multi-user conflicts
+- ✅ Dual storage: MongoDB + file system
+- ✅ State tracking for accurate completion detection
 
 ### Keyword Management Flow
 1. **Client** → **Web Server** PUT `/meetings/{id}/keywords` (keyword array)
@@ -136,15 +169,15 @@ Client ↔ Web Server ← Transcription Service → OpenAI Whisper
 
 ### Web Server API Endpoints
 - `POST /meetings` - Create new meeting
-- `GET /meetings` - List user's meetings
+- `GET /meetings` - List all meetings
 - `GET /meetings/{id}` - Get meeting details
 - `PUT /meetings/{id}` - Update meeting metadata
 - `DELETE /meetings/{id}` - Delete meeting
-- `POST /meetings/{id}/upload-chunk` - Upload audio chunk
 - `PUT /meetings/{id}/keywords` - Update keywords
-- `WebSocket /ws/{user_id}` - Real-time updates
-- `POST /webhook/chunk-completed` - Receive transcription results
-- `POST /webhook/chunk-failed` - Handle transcription failures
+- `WebSocket /ws/meeting/{id}/audio` - VAD audio streaming + real-time updates
+- `POST /webhook/transcription-completed` - Receive transcription results
+- `GET /transcription/health` - Check transcription service health
+- `GET /transcription/job/{job_id}` - Get transcription job status
 
 ### Transcription Service API Endpoints
 - `POST /transcribe` - Accept audio chunk for processing
@@ -153,14 +186,14 @@ Client ↔ Web Server ← Transcription Service → OpenAI Whisper
 - `GET /stats` - Processing statistics
 
 ## Technology Stack
-- **Frontend**: React 18 + Vite + TypeScript with WebSocket support
+- **Frontend**: React 18 + Vite + TypeScript with Web Audio API
 - **Backend API**: FastAPI with async/await patterns using Motor MongoDB driver
 - **Database**: MongoDB 7.0 with async pymongo/motor driver
 - **Transcription**: FastAPI with OpenAI Whisper API integration
 - **Queue**: Threading-based internal queue with job management (no external dependencies)
 - **Communication**: HTTP REST APIs, WebSocket, HTTP webhooks
 - **Containerization**: Docker + Docker Compose with multi-service orchestration
-- **File Storage**: Shared volume for audio files between web-server and transcription services
+- **File Storage**: Shared volume for audio files and transcriptions between web-server and transcription services
 
 ## Environment Configuration
 ```bash
@@ -170,7 +203,7 @@ DATABASE_NAME=meeting_db
 TRANSCRIPTION_SERVICE_URL=http://transcription:8001
 WEB_SERVER_URL=http://web-server:8000
 
-# Transcription Service  
+# Transcription Service
 WEB_SERVER_URL=http://web-server:8000
 OPENAI_API_KEY=your_openai_key
 MAX_CONCURRENT_JOBS=3
@@ -189,21 +222,27 @@ project/
 ├── client/                      # React frontend application (Vite + TypeScript)
 │   ├── src/
 │   │   ├── components/          # React components
-│   │   │   ├── AudioRecorder.tsx        # Audio recording functionality
+│   │   │   ├── AudioRecorder.tsx        # VAD audio recording
 │   │   │   ├── KeywordsManager.tsx      # Keyword CRUD operations
 │   │   │   ├── MeetingDetails.tsx       # Individual meeting view
 │   │   │   ├── MeetingForm.tsx          # Meeting creation/editing
 │   │   │   ├── MeetingList.tsx          # List all meetings
 │   │   │   └── RealTimeTranscription.tsx # Live transcription display
+│   │   ├── services/
+│   │   │   ├── api.ts                   # API client
+│   │   │   └── keywordMatcher.ts        # Keyword highlighting logic
 │   │   ├── App.tsx              # Main application component
 │   │   └── main.tsx             # Entry point
-│   ├── package.json             # React dependencies (axios, react, typescript)
+│   ├── package.json             # React dependencies
 │   └── Dockerfile               # Client container build
 ├── web-server/                  # FastAPI web server (Python)
-│   ├── main.py                  # FastAPI application with all endpoints
-│   ├── audio_service.py         # Audio file handling and chunking
-│   ├── transcription_service.py # Transcription service communication
+│   ├── main.py                  # FastAPI application with WebSocket endpoint
+│   ├── services.py              # Business logic (MeetingService, TranscriptionWebhookService)
+│   ├── transcription_service.py # Transcription service HTTP client
 │   ├── websocket_manager.py     # WebSocket connection management
+│   ├── database.py              # MongoDB connection
+│   ├── models.py                # Pydantic models
+│   ├── config.py                # Configuration
 │   ├── requirements.txt         # Python dependencies
 │   └── Dockerfile               # Web server container build
 ├── transcription/               # Transcription service (Python)
@@ -216,25 +255,14 @@ project/
 │   └── Dockerfile               # Transcription container build
 ├── mongodb/                     # MongoDB initialization
 │   └── init-mongo.js           # Database initialization script
-├── shared_audio/               # Shared volume for audio files
+├── shared_audio/               # Shared volume for audio and transcription files
+│   └── {meeting_id}/
+│       ├── audios/             # WebM audio files
+│       └── transcriptions/     # Text transcription files
 ├── docker-compose.yml          # All 4 services configuration
 ├── .env.example                # Environment variables template
 └── README.md                   # Project documentation
 ```
-
-## Current Implementation Status
-- ✅ Basic Web Server and Transcription Service architecture defined
-- ✅ Webhook communication pattern established
-- ✅ Service boundary rules defined (database access control)
-- ✅ MongoDB integration implemented in Web Server
-- ✅ Meeting management APIs implemented
-- ✅ Client application developed (React/Vite)
-- ✅ WebSocket real-time updates implemented
-- ✅ Audio service and file handling implemented
-- ✅ Keyword management functionality created
-- ✅ Transcription service with job queue implemented
-- ⏳ Authentication system to build (currently using default user)
-- ✅ Full Docker containerization with docker-compose setup
 
 ## Key Development Principles
 
@@ -256,13 +284,21 @@ project/
 - Client displays user-friendly error messages from Web Server
 - Database errors contained within Web Server service
 
-## Implemented Service Features
+### File Management Strategy
+- Organized directory structure per meeting
+- Separate folders for audio and transcription files
+- Session IDs prevent conflicts in multi-user scenarios
+- File naming convention: `vad_{session_id}_{counter}_{timestamp}.{ext}`
+- Dual persistence: MongoDB (aggregated) + File system (individual chunks)
 
-### Web Server (main.py) Features
+## Implementation Features
+
+### Web Server Features
 - **Complete MongoDB integration** using Motor async driver
 - **Meeting CRUD operations** with proper ObjectId handling
-- **Audio file service** with chunked upload support
 - **WebSocket connection management** for real-time updates
+- **Dual file storage** - audio files + transcription text files
+- **State tracking** - totalChunks and completedChunks for accurate status
 - **Transcription service communication** via HTTP requests
 - **Webhook handlers** for receiving transcription results
 - **CORS middleware** configured for client communication
@@ -279,20 +315,10 @@ project/
 
 ### Client Application Features
 - **Meeting management UI** with full CRUD operations
-- **Audio recording component** with chunked upload
+- **Voice Activity Detection** with real-time volume visualization
+- **Dynamic audio chunking** - only sends speech, skips silence
 - **Real-time transcription display** via WebSocket
-- **Keyword management** with add/remove functionality
+- **Keyword management** with live highlighting in transcriptions
 - **Meeting list and details views** with status tracking
 - **Responsive React components** built with TypeScript
 - **Axios integration** for API communication
-
-## Development Priorities
-1. ✅ **MongoDB integration in Web Server** (completed)
-2. ✅ **Meeting management APIs** (completed)
-3. ✅ **Audio upload and chunk handling** (completed)
-4. ✅ **Client application development** (completed)
-5. ✅ **Keyword management** (completed)
-6. ⏳ **Add authentication system** (user management, JWT tokens)
-7. ✅ **Real-time updates optimization** (WebSocket implemented)
-8. **Performance optimization** (caching, file cleanup, error recovery)
-9. **Security hardening** (input validation, rate limiting)
