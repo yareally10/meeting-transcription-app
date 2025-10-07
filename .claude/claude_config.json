@@ -1,0 +1,7 @@
+{
+  "version": "1.0",
+  "project_info": {
+    "name": "meeting-transcription-app",
+    "description": "A meeting transcription application with real-time audio processing and keyword matching"
+  }
+}
