@@ -141,47 +141,77 @@ async def transcription_webhook(result: TranscriptionWebhookResult):
 
 @app.websocket("/ws/meeting/{meeting_id}/audio")
 async def websocket_audio_endpoint(websocket: WebSocket, meeting_id: str):
-    """WebSocket endpoint for audio streaming and real-time transcription"""
+    """WebSocket endpoint for audio streaming and real-time transcription (VAD mode)"""
     await manager.connect(websocket, meeting_id)
-    
+
+    chunk_counter = 0
+
     try:
         # Validate meeting exists
         if not ObjectId.is_valid(meeting_id):
             await websocket.send_text("Error: Invalid meeting ID")
             await websocket.close()
             return
-            
-        # Update meeting status and reset audio processing
+
+        # Update meeting status
         await MeetingService.update_status(meeting_id, "transcribing")
-        audio_service.reset_processing_position(meeting_id)
-        await manager.send_notification(meeting_id, "transcription_status", "connected", "Ready to receive audio")
-        
+        await manager.send_notification(meeting_id, "transcription_status", "connected", "Ready to receive VAD audio chunks")
+
         while True:
             data = await websocket.receive_bytes()
-            
-            try:
-                # Save and process audio chunk
-                result = await audio_service.append_audio_chunk(meeting_id, data)
-                await websocket.send_text(f"Audio chunk saved: {result['file_path']}")
 
-                # Create and submit transcription chunk
-                chunk_result = await audio_service.slice_next_unprocessed_chunk(meeting_id)
-                if chunk_result:
-                    job_id = await transcription_service.submit_transcription_job(meeting_id, chunk_result['chunk_filename'])
-                    
-                    if job_id:
-                        await manager.send_notification(meeting_id, "transcription_status", "processing", f"Processing {chunk_result['chunk_filename']}")
-                    else:
-                        await manager.send_notification(meeting_id, "transcription_status", "error", f"Failed to submit job for {chunk_result['chunk_filename']}")
-                    
+            try:
+                # Save VAD chunk directly (frontend sends complete WebM files)
+                from pathlib import Path
+                from datetime import datetime, timezone
+
+                # Create meeting directory structure
+                meeting_dir = Path(config.SHARED_AUDIO_PATH) / meeting_id / "processed"
+                meeting_dir.mkdir(parents=True, exist_ok=True)
+
+                # Generate unique filename for this VAD chunk
+                timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+                chunk_filename = f"vad_chunk_{chunk_counter}_{timestamp}.webm"
+                chunk_file_path = meeting_dir / chunk_filename
+
+                # Save the chunk directly (it's already a complete WebM file from frontend)
+                with open(chunk_file_path, "wb") as f:
+                    f.write(data)
+
+                chunk_counter += 1
+
+                logger.info(f"Saved VAD chunk {chunk_counter} for meeting {meeting_id}: {chunk_filename} ({len(data)} bytes)")
+                await websocket.send_text(f"VAD chunk {chunk_counter} received: {len(data)} bytes")
+
+                # Submit directly to transcription service
+                job_id = await transcription_service.submit_transcription_job(meeting_id, chunk_filename)
+
+                if job_id:
+                    await manager.send_notification(
+                        meeting_id,
+                        "transcription_status",
+                        "processing",
+                        f"Processing VAD chunk {chunk_counter} ({len(data)} bytes)"
+                    )
+                    logger.info(f"Submitted job {job_id} for VAD chunk {chunk_filename}")
+                else:
+                    await manager.send_notification(
+                        meeting_id,
+                        "transcription_status",
+                        "error",
+                        f"Failed to submit transcription job for chunk {chunk_counter}"
+                    )
+                    logger.error(f"Failed to submit job for VAD chunk {chunk_filename}")
+
             except Exception as e:
-                logger.error(f"Audio processing error for meeting {meeting_id}: {e}")
+                logger.error(f"Error processing VAD chunk for meeting {meeting_id}: {e}")
                 await manager.send_notification(meeting_id, "transcription_status", "error", f"Error processing audio: {str(e)}")
-            
+
     except WebSocketDisconnect:
         manager.disconnect(meeting_id)
         await MeetingService.update_status(meeting_id, "created")
-            
+        logger.info(f"WebSocket disconnected for meeting {meeting_id}. Total VAD chunks received: {chunk_counter}")
+
     except Exception as e:
         logger.error(f"WebSocket error for meeting {meeting_id}: {e}")
         manager.disconnect(meeting_id)

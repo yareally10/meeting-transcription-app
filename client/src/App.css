@@ -340,3 +340,194 @@
     transform: translateY(0);
   }
 }
+
+/* Voice Activity Detection (VAD) Styles */
+.audio-recorder {
+  background: #f5f5f5;
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin-bottom: 2rem;
+}
+
+.audio-recorder h3 {
+  margin-top: 0;
+  color: #333;
+}
+
+.audio-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.audio-status {
+  background: #fff;
+  padding: 1rem;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+}
+
+.status-text {
+  font-size: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.status-indicator {
+  font-weight: 600;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.status-indicator.waiting-for-speech {
+  background: #fff3e0;
+  color: #f57c00;
+}
+
+.status-indicator.recording-speech {
+  background: #ffebee;
+  color: #d32f2f;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.status-indicator.processing {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.status-indicator.stopped {
+  background: #e0e0e0;
+  color: #666;
+}
+
+.status-indicator.error {
+  background: #ffebee;
+  color: #d32f2f;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.vad-state {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background: #f8f9fa;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.volume-meter {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.volume-label {
+  font-weight: 500;
+  font-size: 0.9rem;
+  min-width: 60px;
+}
+
+.volume-bar-container {
+  flex: 1;
+  height: 20px;
+  background: #e0e0e0;
+  border-radius: 10px;
+  overflow: hidden;
+  position: relative;
+}
+
+.volume-bar {
+  height: 100%;
+  transition: width 0.1s ease-out, background-color 0.2s;
+  border-radius: 10px;
+}
+
+.volume-value {
+  font-size: 0.85rem;
+  font-weight: 600;
+  min-width: 50px;
+  text-align: right;
+  color: #666;
+}
+
+.vad-info {
+  margin-top: 0.75rem;
+  padding: 0.5rem;
+  background: #f0f0f0;
+  border-radius: 4px;
+  color: #666;
+}
+
+.start-recording-btn,
+.stop-recording-btn {
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.start-recording-btn {
+  background: #4CAF50;
+  color: white;
+}
+
+.start-recording-btn:hover:not(:disabled) {
+  background: #45a049;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.start-recording-btn:disabled {
+  background: #cccccc;
+  cursor: not-allowed;
+}
+
+.stop-recording-btn {
+  background: #f44336;
+  color: white;
+}
+
+.stop-recording-btn:hover {
+  background: #da190b;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.vad-help {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #fff;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+}
+
+.vad-help summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #1976d2;
+  user-select: none;
+}
+
+.vad-help summary:hover {
+  color: #1565c0;
+}
+
+.vad-help ul {
+  list-style: none;
+  padding-left: 0;
+}
+
+.vad-help li {
+  padding: 0.25rem 0;
+  line-height: 1.6;
+}
