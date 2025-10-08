@@ -16,10 +16,7 @@ class Config:
     
     # File storage
     SHARED_AUDIO_PATH: str = "/app/shared_audio"
-    
-    # Authentication (temporary)
-    DEFAULT_USER_ID: str = "user123"
-    
+
     # CORS
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
     

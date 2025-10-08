@@ -54,12 +54,11 @@ class MeetingUpdate(BaseModel):
 class Meeting(MeetingBase):
     """Full meeting model."""
     id: PyObjectId = None
-    createdBy: str = Field(config.DEFAULT_USER_ID, alias="created_by")
     createdAt: datetime = Field(alias="created_at")
     updatedAt: datetime = Field(alias="updated_at")
     status: str = "created"
     fullTranscription: Optional[str] = Field(None, alias="full_transcription")
-    
+
     class Config:
         populate_by_name = True
         arbitrary_types_allowed = True

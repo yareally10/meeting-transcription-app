@@ -10,13 +10,16 @@ from bson import ObjectId
 from config import config
 from database import database
 from models import (
-    Meeting, MeetingCreate, MeetingUpdate, KeywordsUpdate, 
+    Meeting, MeetingCreate, MeetingUpdate, KeywordsUpdate,
     TranscriptionWebhookResult
 )
-from services import MeetingService, TranscriptionWebhookService
-from audio_service import AudioFileService
-from transcription_service import TranscriptionService
-from websocket_manager import ConnectionManager
+from services import (
+    MeetingService,
+    TranscriptionWebhookService,
+    AudioFileService,
+    TranscriptionService,
+    ConnectionManager
+)
 
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL))
 logger = logging.getLogger(__name__)
