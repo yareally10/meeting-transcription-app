@@ -183,3 +183,9 @@ meeting-transcription-app/
 │           └── audio/     # Audio chunks by session
 └── docker-compose.yml     # Service orchestration with health checks
 ```
+
+## License
+
+MIT License - Copyright (c) 2025 yareally10
+
+See [LICENSE](LICENSE) file for details.
