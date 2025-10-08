@@ -39,8 +39,8 @@ class TranscriptionWorker:
         start_time = datetime.now()
         
         try:
-            # Build file path - files are in processed folder
-            audio_file_path = Path(config.shared_audio_path) / meeting_id / "processed" / filename
+            # Build file path - files are in audio folder
+            audio_file_path = Path(config.shared_audio_path) / meeting_id / "audio" / filename
             
             if not audio_file_path.exists():
                 raise FileNotFoundError(f"Audio file not found: {audio_file_path}")

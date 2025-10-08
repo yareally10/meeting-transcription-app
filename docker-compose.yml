@@ -22,7 +22,7 @@ services:
       - "8000:8000"
     volumes:
       - ./web-server:/app
-      - ./shared_audio:/app/shared_audio
+      - ./volumes/shared_audio:/app/shared_audio
     environment:
       - MONGODB_URL=mongodb://mongodb:27017
       - DATABASE_NAME=meeting_db
@@ -40,7 +40,7 @@ services:
       - "8001:8001"
     volumes:
       - ./transcription:/app
-      - ./shared_audio:/app/shared_audio
+      - ./volumes/shared_audio:/app/shared_audio
     environment:
       - WEB_SERVER_URL=http://web-server:8000
       - OPENAI_API_KEY=${OPENAI_API_KEY}
@@ -56,7 +56,7 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - redis_data:/data
+      - ./volumes/redis:/data
     command: redis-server --appendonly yes
     networks:
       - transcription-network
@@ -66,16 +66,12 @@ services:
     ports:
       - "27017:27017"
     volumes:
-      - mongodb_data:/data/db
+      - ./volumes/mongodb:/data/db
       - ./mongodb/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
     environment:
       - MONGO_INITDB_DATABASE=meeting_db
     networks:
       - transcription-network
-
-volumes:
-  mongodb_data:
-  redis_data:
 
 networks:
   transcription-network:

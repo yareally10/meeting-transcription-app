@@ -33,9 +33,9 @@ export default function AudioRecorder({ meetingId, websocket, onStatusChange }: 
   // VAD Configuration Parameters
   const VAD_CONFIG = {
     SILENCE_THRESHOLD: 0.01,          // Volume below this = silence (0-1 range)
-    SPEECH_START_DELAY_MS: 300,       // Require 300ms of speech to start recording
-    SPEECH_END_DELAY_MS: 1500,        // Require 1.5s of silence to end recording
-    MIN_CHUNK_DURATION_MS: 2000,      // Skip chunks shorter than 2s (filters coughs, clicks)
+    SPEECH_START_DELAY_MS: 200,       // Require 200ms of speech to start recording
+    SPEECH_END_DELAY_MS: 1000,        // Require 1s of silence to end recording
+    MIN_CHUNK_DURATION_MS: 1000,      // Skip chunks shorter than 1s (filters coughs, clicks)
     MAX_CHUNK_DURATION_MS: 30000,     // Force-end chunks longer than 30s (prevent memory issues)
     CHECK_INTERVAL_MS: 100            // Check volume every 100ms
   };

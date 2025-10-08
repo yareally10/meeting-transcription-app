@@ -20,9 +20,10 @@ if config_error:
 
 app = FastAPI(title="Meeting Transcription Service", version="1.0.0")
 
+# Only allow requests from the web server
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[config.web_server_url],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -80,8 +81,8 @@ async def transcribe_audio_file(request: TranscriptionRequest):
     if not config.openai_api_key:
         raise HTTPException(status_code=500, detail="OpenAI API key not configured")
     
-    # Check if audio file exists - files are now in processed folder
-    audio_file_path = Path(config.shared_audio_path) / request.meeting_id / "processed" / request.filename
+    # Check if audio file exists in audio folder
+    audio_file_path = Path(config.shared_audio_path) / request.meeting_id / "audio" / request.filename
     if not audio_file_path.exists():
         raise HTTPException(status_code=404, detail=f"Audio file not found: {request.filename}")
     
