@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 import os
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from bson import ObjectId
 
@@ -145,7 +146,6 @@ async def websocket_audio_endpoint(websocket: WebSocket, meeting_id: str):
     await manager.connect(websocket, meeting_id)
 
     # Generate unique session ID for this WebSocket connection
-    import uuid
     session_id = str(uuid.uuid4())[:8]
 
     try:

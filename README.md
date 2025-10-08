@@ -4,16 +4,18 @@ A meeting transcription platform with microservices architecture that provides r
 
 ## Architecture
 
-The platform consists of four main services:
+The platform consists of five main services:
 
 - **Client**: React frontend with Vite and TypeScript (Port 3000)
 - **Web Server**: FastAPI backend with MongoDB integration and WebSocket support (Port 8000)
-- **Transcription Service**: Dedicated OpenAI Whisper transcription service (Port 8001)
+- **Transcription Service**: Dedicated OpenAI Whisper transcription service with Redis queue (Port 8001)
 - **MongoDB**: Database for persistent storage (Port 27017)
+- **Redis**: Job queue and session management (Port 6379)
 
 ### Service Communication
 - Web Server ↔ MongoDB: Database operations
 - Web Server ↔ Transcription Service: HTTP API calls and webhooks
+- Transcription Service ↔ Redis: Job queue management with persistence
 - Client ↔ Web Server: REST API and WebSocket connections
 - Shared audio storage between Web Server and Transcription Service
 
@@ -46,6 +48,7 @@ The platform consists of four main services:
    - **Web Server API**: http://localhost:8000
    - **API Documentation**: http://localhost:8000/docs
    - **Transcription Service**: http://localhost:8001
+   - **Redis**: localhost:6379 (internal service)
 
 ## Key Features
 
@@ -57,7 +60,8 @@ The platform consists of four main services:
 ### Audio Processing & Transcription
 - Real-time audio upload and processing
 - OpenAI Whisper-powered transcription
-- Asynchronous job processing with queue management
+- Redis-backed job queue with persistence
+- Asynchronous job processing with multi-worker support
 - Webhook-based result notifications
 - Support for multiple concurrent transcription jobs (configurable, default: 3)
 
@@ -132,6 +136,7 @@ uvicorn main:app --reload --port 8001
 Required environment variables:
 - `OPENAI_API_KEY`: Your OpenAI API key for transcription
 - `MONGODB_URL`: MongoDB connection string (default: mongodb://mongodb:27017)
+- `REDIS_URL`: Redis connection string (default: redis://redis:6379)
 - `MAX_CONCURRENT_JOBS`: Number of concurrent transcription workers (default: 3)
 
 ### Service Architecture Details
@@ -139,11 +144,12 @@ Required environment variables:
 #### Transcription Service
 - **Modular Design**: Clean separation of concerns with dedicated modules
   - `config.py`: Configuration management
-  - `job_manager.py`: Job lifecycle and queue management
+  - `job_manager.py`: Job lifecycle and Redis queue management
+  - `redis_queue.py`: Redis queue operations
   - `webhook_handler.py`: Webhook notifications
   - `transcription_worker.py`: Worker thread management
 - **Worker Threads**: Configurable number of concurrent transcription workers
-- **Queue System**: Thread-safe job queue with status tracking
+- **Queue System**: Redis-backed job queue with persistence and 24-hour TTL for job status
 - **Error Handling**: Comprehensive error handling and logging
 
 #### Web Server
@@ -158,14 +164,22 @@ Required environment variables:
 - **Transcription Service Health**: http://localhost:8001/health
 - **Transcription Statistics**: http://localhost:8001/stats
 - **MongoDB**: Standard MongoDB monitoring on port 27017
+- **Redis**: Redis CLI monitoring on port 6379
+
+All services include Docker health checks with automatic restart policies.
 
 ## File Structure
 ```
 meeting-transcription-app/
 ├── client/                # React frontend
 ├── web-server/            # FastAPI web server
-├── transcription/         # Transcription service
-├── mongodb/               # Database initialization
-├── shared_audio/          # Shared audio file storage
-└── docker-compose.yml     # Service orchestration
+├── transcription/         # Transcription service with Redis queue
+├── mongodb/               # Database initialization scripts
+├── volumes/               # Persistent data storage
+│   ├── mongodb/           # MongoDB data
+│   ├── redis/             # Redis data with AOF persistence
+│   └── shared_audio/      # Audio files organized by meeting ID
+│       └── {meeting_id}/
+│           └── audio/     # Audio chunks by session
+└── docker-compose.yml     # Service orchestration with health checks
 ```
