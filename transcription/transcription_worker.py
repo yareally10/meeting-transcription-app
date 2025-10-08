@@ -109,7 +109,7 @@ class TranscriptionWorker:
         logger.info(f"Starting transcription worker {self.worker_id}")
         while True:
             try:
-                job_data = self.job_manager.get_next_job(timeout=1.0)
+                job_data = self.job_manager.get_next_job(timeout=1)
                 if job_data:
                     self.process_job(job_data)
                     self.job_manager.mark_job_done()

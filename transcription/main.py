@@ -28,8 +28,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize job manager
-job_manager = JobManager()
+# Initialize job manager with Redis
+try:
+    job_manager = JobManager(config.redis_url)
+    logger.info(f"Connected to Redis at {config.redis_url}")
+except Exception as e:
+    logger.error(f"Failed to initialize JobManager with Redis: {e}")
+    raise
 
 class TranscriptionRequest(BaseModel):
     meeting_id: str
