@@ -146,20 +146,27 @@ async def transcription_webhook(result: TranscriptionWebhookResult):
 @app.websocket("/ws/meeting/{meeting_id}/audio")
 async def websocket_audio_endpoint(websocket: WebSocket, meeting_id: str):
     """WebSocket endpoint for audio streaming and real-time transcription"""
-    await manager.connect(websocket, meeting_id)
-
     # Generate unique session ID for this WebSocket connection
     session_id = str(uuid.uuid4())[:8]
 
     try:
+        # Connect to the manager (may raise WebSocketException if limit reached)
+        await manager.connect(websocket, meeting_id, session_id)
+    except Exception as e:
+        logger.error(f"Failed to connect WebSocket for meeting {meeting_id}: {e}")
+        return
+
+    try:
         # Validate meeting exists
         if not ObjectId.is_valid(meeting_id):
-            await websocket.send_text("Error: Invalid meeting ID")
+            await manager.send_to_connection(meeting_id, session_id, "Error: Invalid meeting ID")
             await websocket.close()
             return
 
-        # Update meeting status
-        await MeetingService.update_status(meeting_id, "transcribing")
+        # Update meeting status only if this is the first connection
+        if manager.get_connection_count(meeting_id) == 1:
+            await MeetingService.update_status(meeting_id, "transcribing")
+
         await manager.send_notification(
             meeting_id,
             "transcription_status",
@@ -179,12 +186,18 @@ async def websocket_audio_endpoint(websocket: WebSocket, meeting_id: str):
                 filename = save_result["filename"]
                 file_size = save_result["file_size"]
 
-                await websocket.send_text(f"Audio chunk {chunk_number} received: {file_size} bytes")
+                # Send acknowledgment to the specific connection that sent the audio
+                await manager.send_to_connection(
+                    meeting_id,
+                    session_id,
+                    f"Audio chunk {chunk_number} received: {file_size} bytes"
+                )
 
                 # Submit to transcription service
                 job_id = await transcription_service.submit_transcription_job(meeting_id, filename)
 
                 if job_id:
+                    # Broadcast processing status to all connections for this meeting
                     await manager.send_notification(
                         meeting_id,
                         "transcription_status",
@@ -193,6 +206,7 @@ async def websocket_audio_endpoint(websocket: WebSocket, meeting_id: str):
                     )
                     logger.info(f"Submitted job {job_id} for audio chunk {filename}")
                 else:
+                    # Broadcast error to all connections for this meeting
                     await manager.send_notification(
                         meeting_id,
                         "transcription_status",
@@ -211,15 +225,24 @@ async def websocket_audio_endpoint(websocket: WebSocket, meeting_id: str):
                 )
 
     except WebSocketDisconnect:
-        manager.disconnect(meeting_id)
+        manager.disconnect(meeting_id, session_id)
         audio_service.cleanup_session(session_id)
-        await MeetingService.update_status(meeting_id, "created")
+
+        # Only update meeting status if this was the last connection
+        if manager.get_connection_count(meeting_id) == 0:
+            await MeetingService.update_status(meeting_id, "created")
+
         logger.info(f"WebSocket session {session_id} disconnected for meeting {meeting_id}")
 
     except Exception as e:
         logger.error(f"WebSocket error for meeting {meeting_id}: {e}")
-        manager.disconnect(meeting_id)
+        manager.disconnect(meeting_id, session_id)
         audio_service.cleanup_session(session_id)
+
+        # Only update meeting status if this was the last connection
+        if manager.get_connection_count(meeting_id) == 0:
+            await MeetingService.update_status(meeting_id, "created")
+
         try:
             await websocket.send_text(f"Error: {str(e)}")
             await websocket.close()
