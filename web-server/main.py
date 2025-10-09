@@ -167,11 +167,15 @@ async def websocket_audio_endpoint(websocket: WebSocket, meeting_id: str):
         if manager.get_connection_count(meeting_id) == 1:
             await MeetingService.update_status(meeting_id, "transcribing")
 
+        # Notify all connections that a new connection joined
         await manager.send_notification(
             meeting_id,
-            "transcription_status",
-            "connected",
-            f"Ready to receive audio chunks (session: {session_id})"
+            "connection_event",
+            "joined",
+            f"A new connection joined the meeting",
+            {
+                "connection_count": manager.get_connection_count(meeting_id)
+            }
         )
         logger.info(f"WebSocket session {session_id} started for meeting {meeting_id}")
 
@@ -182,36 +186,20 @@ async def websocket_audio_endpoint(websocket: WebSocket, meeting_id: str):
                 # Save audio chunk using audio service
                 save_result = await audio_service.save_audio_chunk(meeting_id, session_id, data)
 
-                chunk_number = save_result["chunk_number"]
                 filename = save_result["filename"]
-                file_size = save_result["file_size"]
-
-                # Send acknowledgment to the specific connection that sent the audio
-                await manager.send_to_connection(
-                    meeting_id,
-                    session_id,
-                    f"Audio chunk {chunk_number} received: {file_size} bytes"
-                )
 
                 # Submit to transcription service
                 job_id = await transcription_service.submit_transcription_job(meeting_id, filename)
 
                 if job_id:
-                    # Broadcast processing status to all connections for this meeting
-                    await manager.send_notification(
-                        meeting_id,
-                        "transcription_status",
-                        "processing",
-                        f"Processing audio chunk {chunk_number} ({file_size} bytes)"
-                    )
                     logger.info(f"Submitted job {job_id} for audio chunk {filename}")
                 else:
                     # Broadcast error to all connections for this meeting
                     await manager.send_notification(
                         meeting_id,
                         "transcription_status",
-                        "error",
-                        f"Failed to submit transcription job for chunk {chunk_number}"
+                        "failed",
+                        f"Failed to submit transcription job for audio chunk"
                     )
                     logger.error(f"Failed to submit job for audio chunk {filename}")
 
@@ -220,13 +208,24 @@ async def websocket_audio_endpoint(websocket: WebSocket, meeting_id: str):
                 await manager.send_notification(
                     meeting_id,
                     "transcription_status",
-                    "error",
+                    "failed",
                     f"Error processing audio: {str(e)}"
                 )
 
     except WebSocketDisconnect:
         manager.disconnect(meeting_id, session_id)
         audio_service.cleanup_session(session_id)
+
+        # Notify remaining connections that someone left
+        await manager.send_notification(
+            meeting_id,
+            "connection_event",
+            "left",
+            f"A connection left the meeting",
+            {
+                "connection_count": manager.get_connection_count(meeting_id)
+            }
+        )
 
         # Only update meeting status if this was the last connection
         if manager.get_connection_count(meeting_id) == 0:
@@ -238,6 +237,17 @@ async def websocket_audio_endpoint(websocket: WebSocket, meeting_id: str):
         logger.error(f"WebSocket error for meeting {meeting_id}: {e}")
         manager.disconnect(meeting_id, session_id)
         audio_service.cleanup_session(session_id)
+
+        # Notify remaining connections that someone left
+        await manager.send_notification(
+            meeting_id,
+            "connection_event",
+            "left",
+            f"A connection left the meeting",
+            {
+                "connection_count": manager.get_connection_count(meeting_id)
+            }
+        )
 
         # Only update meeting status if this was the last connection
         if manager.get_connection_count(meeting_id) == 0:

@@ -55,9 +55,26 @@ class ConnectionManager:
             self.active_connections[meeting_id] = {}
 
         self.active_connections[meeting_id][connection_id] = websocket
+
+        connection_count = len(self.active_connections[meeting_id])
         logger.info(
             f"WebSocket connected for meeting {meeting_id}, connection {connection_id} "
-            f"({len(self.active_connections[meeting_id])}/{self.MAX_CONNECTIONS_PER_MEETING} connections)"
+            f"({connection_count}/{self.MAX_CONNECTIONS_PER_MEETING} connections)"
+        )
+
+        # Send acknowledgement to the new connection
+        await websocket.send_text(
+            json.dumps({
+                "type": "connection_ack",
+                "status": "connected",
+                "message": f"Connected to meeting (connection {connection_count}/{self.MAX_CONNECTIONS_PER_MEETING})",
+                "data": {
+                    "connection_id": connection_id,
+                    "meeting_id": meeting_id,
+                    "connection_count": connection_count
+                },
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            })
         )
 
     def disconnect(self, meeting_id: str, connection_id: str):
