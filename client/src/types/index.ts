@@ -2,15 +2,14 @@ export interface Meeting {
   id: string;
   title: string;
   description: string;
-  createdBy: string;
   createdAt: string;
   updatedAt: string;
   status: 'created' | 'uploading' | 'transcribing' | 'completed' | 'failed';
   keywords: string[];
   fullTranscription?: string;
-  metadata: {
-    language: string;
-    participants: string[];
+  metadata?: {
+    language?: string;
+    participants?: string[];
     totalDuration?: number;
     processingStarted?: string;
     processingCompleted?: string;
