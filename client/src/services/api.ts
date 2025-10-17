@@ -1,14 +1,20 @@
 import axios from 'axios';
+import applyCaseMiddleware from 'axios-case-converter';
 import { Meeting, CreateMeetingRequest, UpdateMeetingRequest } from '../types';
 
 const API_BASE_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
 
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+// Apply case conversion middleware to automatically convert:
+// - Request data: camelCase → snake_case
+// - Response data: snake_case → camelCase
+const api = applyCaseMiddleware(
+  axios.create({
+    baseURL: API_BASE_URL,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  })
+);
 
 export const meetingApi = {
   create: async (meeting: CreateMeetingRequest): Promise<Meeting> => {

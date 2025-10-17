@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { meetingApi } from '../services/api';
 import { Meeting } from '../types';
+import MeetingCard from './MeetingCard';
 
 interface MeetingListProps {
   onSelectMeeting: (meetingId: string) => void;
@@ -26,25 +27,22 @@ export default function MeetingList({ onSelectMeeting }: MeetingListProps) {
     }
   };
 
-  const handleSelectMeeting = (meetingId: string) => {
-    setSelectedMeetingId(meetingId);
-    onSelectMeeting(meetingId);
+  const handleSelectMeeting = (meeting: Meeting) => {
+    setSelectedMeetingId(meeting.id);
+    onSelectMeeting(meeting.id);
   };
 
-  const handleDeleteMeeting = async (meetingId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (confirm('Are you sure you want to delete this meeting?')) {
-      try {
-        await meetingApi.delete(meetingId);
-        setMeetings(meetings.filter(m => m.id !== meetingId));
-        if (selectedMeetingId === meetingId) {
-          setSelectedMeetingId(null);
-          onSelectMeeting('');
-        }
-      } catch (error) {
-        console.error('Failed to delete meeting:', error);
-        alert('Failed to delete meeting');
+  const handleDeleteMeeting = async (meetingId: string) => {
+    try {
+      await meetingApi.delete(meetingId);
+      setMeetings(meetings.filter(m => m.id !== meetingId));
+      if (selectedMeetingId === meetingId) {
+        setSelectedMeetingId(null);
+        onSelectMeeting('');
       }
+    } catch (error) {
+      console.error('Failed to delete meeting:', error);
+      alert('Failed to delete meeting');
     }
   };
 
@@ -58,35 +56,17 @@ export default function MeetingList({ onSelectMeeting }: MeetingListProps) {
       {meetings.length === 0 ? (
         <p>No meetings yet. Create your first meeting above.</p>
       ) : (
-        <ul className="meeting-list">
+        <div className="meeting-list">
           {meetings.map((meeting) => (
-            <li
+            <MeetingCard
               key={meeting.id}
-              className={`meeting-item ${selectedMeetingId === meeting.id ? 'selected' : ''}`}
-              onClick={() => handleSelectMeeting(meeting.id)}
-            >
-              <div className="meeting-title">{meeting.title}</div>
-              <div className="meeting-description">{meeting.description}</div>
-              {meeting.keywords.length > 0 && (
-                <div className="keywords-list">
-                  {meeting.keywords.map((keyword) => (
-                    <span key={keyword} className="keyword-tag">
-                      {keyword}
-                    </span>
-                  ))}
-                </div>
-              )}
-              <div className="meeting-actions">
-                <button
-                  onClick={(e) => handleDeleteMeeting(meeting.id, e)}
-                  className="delete-btn"
-                >
-                  Delete
-                </button>
-              </div>
-            </li>
+              meeting={meeting}
+              isSelected={selectedMeetingId === meeting.id}
+              onSelect={handleSelectMeeting}
+              onDelete={handleDeleteMeeting}
+            />
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );
