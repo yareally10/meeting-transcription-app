@@ -1,5 +1,5 @@
 import React from 'react';
-import { Meeting } from '../types';
+import { Meeting } from '../../types';
 
 interface MeetingCardProps {
   meeting: Meeting;

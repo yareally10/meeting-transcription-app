@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { meetingApi } from '../services/api';
+import { meetingApi } from '../../services/api';
 
 interface KeywordsManagerProps {
   meetingId?: string; // Optional for creation mode

@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { meetingApi } from '../services/api';
-import { CreateMeetingRequest } from '../types';
+import { meetingApi } from '../../services/api';
+import { CreateMeetingRequest } from '../../types';
 import KeywordsManager from './KeywordsManager';
 
 interface MeetingFormProps {
