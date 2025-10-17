@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { meetingApi } from '../services/api';
-import { Meeting } from '../types';
+import { meetingApi } from '../../services/api';
+import { Meeting } from '../../types';
 import AudioRecorder from './AudioRecorder';
 import RealTimeTranscription from './RealTimeTranscription';
 import KeywordsManager from './KeywordsManager';

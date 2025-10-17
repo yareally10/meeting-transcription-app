@@ -90,6 +90,25 @@
   gap: 1rem;
 }
 
+.meeting-list-count {
+  font-size: 0.9rem;
+  color: #666;
+  margin-bottom: 1rem;
+  font-weight: 500;
+}
+
+.meeting-list-count-total {
+  color: #999;
+  font-weight: 400;
+}
+
+.meeting-list-empty {
+  color: #999;
+  font-size: 0.95rem;
+  text-align: center;
+  padding: 2rem 1rem;
+}
+
 /* Meeting Card Styles */
 .meeting-card {
   background: white;

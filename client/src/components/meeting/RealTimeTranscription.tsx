@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { matchKeywords } from '../services/keywordMatcher';
+import { matchKeywords } from '../../services/keywordMatcher';
 
 interface TranscriptionChunk {
   id: string;
