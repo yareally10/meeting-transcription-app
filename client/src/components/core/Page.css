@@ -1,0 +1,16 @@
+/* Page Component Styles */
+.page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.page-title {
+  font-size: 3.2em;
+  line-height: 1.1;
+  margin-bottom: 1.5rem;
+}
+
+.page-content {
+  width: 100%;
+}
