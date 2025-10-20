@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { matchKeywords } from '../../services/keywordMatcher';
+import './RealTimeTranscription.css';
 
 interface TranscriptionChunk {
   id: string;

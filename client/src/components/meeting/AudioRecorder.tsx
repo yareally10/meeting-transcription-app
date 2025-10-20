@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import './AudioRecorder.css';
 
 interface AudioRecorderProps {
   meetingId: string;

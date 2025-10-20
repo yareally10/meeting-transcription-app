@@ -2,6 +2,7 @@ import { useMeetingContext } from '../../contexts/MeetingContext';
 import { Meeting } from '../../types';
 import MeetingCard from './MeetingCard';
 import { List } from '../core';
+import './MeetingList.css';
 
 interface MeetingListProps {
   searchQuery?: string;

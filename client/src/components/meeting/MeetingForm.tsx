@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Meeting, CreateMeetingRequest } from '../../types';
 import { useMeetingContext } from '../../contexts/MeetingContext';
 import KeywordsManager from './KeywordsManager';
+import './MeetingForm.css';
 
 interface MeetingFormProps {
   onMeetingCreated: (meeting: Meeting) => void;
