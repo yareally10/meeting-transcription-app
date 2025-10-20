@@ -1,15 +1,18 @@
+import { useState } from 'react';
 import { useMeetingContext } from '../../contexts/MeetingContext';
 import { Meeting } from '../../types';
 import MeetingCard from './MeetingCard';
+import MeetingListControls from './MeetingListControls';
 import { List } from '../core';
 import './MeetingList.css';
 
 interface MeetingListProps {
-  searchQuery?: string;
   onRequestConfirmation: () => Promise<boolean>;
+  onCreateClick: () => void;
 }
 
-export default function MeetingList({ searchQuery = '', onRequestConfirmation }: MeetingListProps) {
+export default function MeetingList({ onRequestConfirmation, onCreateClick }: MeetingListProps) {
+  const [searchQuery, setSearchQuery] = useState('');
   const {
     meetings,
     currentMeetingId,
@@ -39,6 +42,10 @@ export default function MeetingList({ searchQuery = '', onRequestConfirmation }:
     await joinMeeting(meeting.id);
   };
 
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+  };
+
   if (isLoading) {
     return <div>Loading meetings...</div>;
   }
@@ -55,13 +62,16 @@ export default function MeetingList({ searchQuery = '', onRequestConfirmation }:
   });
 
   return (
-    <div>
-      <div className="meeting-list-count">
-        {filteredMeetings.length} {filteredMeetings.length === 1 ? 'meeting' : 'meetings'}
-        {searchQuery && filteredMeetings.length !== meetings.length && (
-          <span className="meeting-list-count-total"> (of {meetings.length} total)</span>
-        )}
-      </div>
+    <div className="meeting-list-container">
+      <h1 className="meeting-list-title">
+        {filteredMeetings.length === 1 ? 'Meeting' : 'Meetings'} [{filteredMeetings.length} / {meetings.length}] 
+      </h1>
+
+      <MeetingListControls
+        onSearch={handleSearch}
+        onCreateClick={onCreateClick}
+      />
+
       {filteredMeetings.length === 0 ? (
         <p className="meeting-list-empty">
           {searchQuery

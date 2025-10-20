@@ -1,4 +1,18 @@
 /* Meeting List Styles */
+.meeting-list-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.meeting-list-title {
+  margin: 0 0 1.5rem 0;
+  font-size: 2rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  letter-spacing: -0.02em;
+}
+
 .meeting-list {
   list-style: none;
   padding: 0;

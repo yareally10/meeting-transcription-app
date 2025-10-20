@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Page, Dialog } from '../core';
 import MeetingList from './MeetingList';
-import MeetingListControls from './MeetingListControls';
 import MeetingForm from './MeetingForm';
 import MeetingDetails from './MeetingDetails';
 import { MeetingProvider, useMeetingContext } from '../../contexts/MeetingContext';
@@ -16,7 +15,6 @@ const MeetingPageContent: React.FC = () => {
   } = useMeetingContext();
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
 
   // Confirmation dialog state
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
@@ -49,10 +47,6 @@ const MeetingPageContent: React.FC = () => {
     await joinMeeting(meeting.id);
   };
 
-  const handleSearch = (query: string) => {
-    setSearchQuery(query);
-  };
-
   const handleConfirmLeave = () => {
     if (confirmResolve) {
       confirmResolve(true);
@@ -73,16 +67,9 @@ const MeetingPageContent: React.FC = () => {
     <Page title="Meeting Transcription App">
       <div className="meeting-page-container">
         <div className="meeting-page-sidebar">
-          <div className="meeting-list-header">
-            <h2>Meetings</h2>
-          </div>
-          <MeetingListControls
-            onSearch={handleSearch}
-            onCreateClick={handleCreateClick}
-          />
           <MeetingList
-            searchQuery={searchQuery}
             onRequestConfirmation={requestConfirmation}
+            onCreateClick={handleCreateClick}
           />
         </div>
 
