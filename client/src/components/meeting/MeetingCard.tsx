@@ -7,23 +7,14 @@ interface MeetingCardProps {
   isSelected: boolean;
   onSelect: (meeting: Meeting) => void;
   onJoin: (meeting: Meeting) => void;
-  onDelete: (id: string) => void;
 }
 
 const MeetingCard: React.FC<MeetingCardProps> = ({
   meeting,
   isSelected,
   onSelect,
-  onJoin,
-  onDelete
+  onJoin
 }) => {
-  const handleDelete = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (window.confirm(`Are you sure you want to delete "${meeting.title}"?`)) {
-      onDelete(meeting.id);
-    }
-  };
-
   const handleJoin = (e: React.MouseEvent) => {
     e.stopPropagation();
     onJoin(meeting);
@@ -64,13 +55,6 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
     >
       <div className="meeting-card-header">
         <h3 className="meeting-card-title">{meeting.title}</h3>
-        <button
-          className="meeting-card-delete"
-          onClick={handleDelete}
-          aria-label="Delete meeting"
-        >
-          ×
-        </button>
       </div>
 
       {meeting.description && (

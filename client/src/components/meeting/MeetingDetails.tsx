@@ -4,6 +4,7 @@ import { Meeting } from '../../types';
 import AudioRecorder from './AudioRecorder';
 import RealTimeTranscription from './RealTimeTranscription';
 import KeywordsManager from './KeywordsManager';
+import { Dialog } from '../core';
 import { useMeetingContext } from '../../contexts/MeetingContext';
 import './MeetingDetails.css';
 
@@ -14,12 +15,13 @@ interface MeetingDetailsProps {
 }
 
 export default function MeetingDetails({ meetingId, mode = 'view', onClose }: MeetingDetailsProps) {
-  const { currentMeeting, updateMeetingKeywords } = useMeetingContext();
+  const { currentMeeting, updateMeetingKeywords, deleteMeeting, leaveMeeting } = useMeetingContext();
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [websocket, setWebsocket] = useState<WebSocket | null>(null);
   const websocketRef = useRef<WebSocket | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   const loadMeetingDetails = async () => {
     if (!meetingId) {
@@ -140,6 +142,25 @@ export default function MeetingDetails({ meetingId, mode = 'view', onClose }: Me
     }
   };
 
+  const handleDeleteClick = () => {
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    try {
+      await deleteMeeting(meetingId);
+      setIsDeleteDialogOpen(false);
+      // Leave the meeting and clear the selection
+      leaveMeeting();
+    } catch (error) {
+      console.error('Failed to delete meeting:', error);
+      alert('Failed to delete meeting');
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setIsDeleteDialogOpen(false);
+  };
 
   if (!meetingId) {
     return (
@@ -211,17 +232,23 @@ export default function MeetingDetails({ meetingId, mode = 'view', onClose }: Me
 
   // Render in 'join' mode: full meeting interface with audio recorder and transcription
   return (
-    <div className="meeting-details">
-      <div className="meeting-details-header">
-        <h2>{meeting.title}</h2>
-        {onClose && (
-          <button onClick={onClose} className="close-btn">
-            ×
-          </button>
-        )}
-      </div>
+    <>
+      <div className="meeting-details">
+        <div className="meeting-details-header">
+          <h2>{meeting.title}</h2>
+          <div className="meeting-details-header-actions">
+            <button onClick={handleDeleteClick} className="delete-meeting-btn">
+              Delete Meeting
+            </button>
+            {onClose && (
+              <button onClick={onClose} className="close-btn">
+                ×
+              </button>
+            )}
+          </div>
+        </div>
 
-      <div className="meeting-details-content">
+        <div className="meeting-details-content">
         {meeting.description && (
           <div className="description-section">
             <h3>Description</h3>
@@ -300,5 +327,30 @@ export default function MeetingDetails({ meetingId, mode = 'view', onClose }: Me
         )}
       </div>
     </div>
+
+    <Dialog
+      isOpen={isDeleteDialogOpen}
+      onClose={handleDeleteCancel}
+      title="Delete Meeting?"
+    >
+      <div className="confirm-dialog-content">
+        <p>Are you sure you want to delete "{meeting.title}"? This action cannot be undone.</p>
+        <div className="confirm-dialog-actions">
+          <button
+            className="confirm-dialog-button confirm-dialog-button-cancel"
+            onClick={handleDeleteCancel}
+          >
+            Cancel
+          </button>
+          <button
+            className="confirm-dialog-button confirm-dialog-button-confirm"
+            onClick={handleDeleteConfirm}
+          >
+            Delete Meeting
+          </button>
+        </div>
+      </div>
+    </Dialog>
+    </>
   );
 }

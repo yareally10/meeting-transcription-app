@@ -16,7 +16,6 @@ export default function MeetingList({ searchQuery = '', onRequestConfirmation }:
     isInActiveMeeting,
     selectMeeting,
     joinMeeting,
-    deleteMeeting,
     isLoading
   } = useMeetingContext();
 
@@ -38,15 +37,6 @@ export default function MeetingList({ searchQuery = '', onRequestConfirmation }:
     }
 
     await joinMeeting(meeting.id);
-  };
-
-  const handleDeleteMeeting = async (meetingId: string) => {
-    try {
-      await deleteMeeting(meetingId);
-    } catch (error) {
-      console.error('Failed to delete meeting:', error);
-      alert('Failed to delete meeting');
-    }
   };
 
   if (isLoading) {
@@ -91,7 +81,6 @@ export default function MeetingList({ searchQuery = '', onRequestConfirmation }:
                 isSelected={currentMeetingId === meeting.id}
                 onSelect={handleSelectMeeting}
                 onJoin={handleJoinMeeting}
-                onDelete={handleDeleteMeeting}
               />
             </List.Item>
           ))}
