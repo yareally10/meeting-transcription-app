@@ -1,24 +1,38 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Page, Dialog } from '../core';
 import MeetingList from './MeetingList';
 import MeetingListControls from './MeetingListControls';
 import MeetingForm from './MeetingForm';
 import MeetingDetails from './MeetingDetails';
+import { MeetingProvider, useMeetingContext } from '../../contexts/MeetingContext';
 import './MeetingPage.css';
 
-const MeetingPage: React.FC = () => {
-  const [selectedMeeting, setSelectedMeeting] = useState<string | null>(null);
-  const [meetingMode, setMeetingMode] = useState<'view' | 'join'>('view');
+const MeetingPageContent: React.FC = () => {
+  const {
+    currentMeetingId,
+    currentMeetingMode,
+    refreshMeetings,
+  } = useMeetingContext();
+
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Confirmation dialog state
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
-  const [confirmAction, setConfirmAction] = useState<{
-    type: 'select' | 'join';
-    meetingId: string;
-    message: string;
-  } | null>(null);
+  const [confirmResolve, setConfirmResolve] = useState<((value: boolean) => void) | null>(null);
+
+  // Load meetings on mount
+  useEffect(() => {
+    refreshMeetings();
+  }, [refreshMeetings]);
+
+  // Simplified confirmation handler with single message
+  const requestConfirmation = useCallback((): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setConfirmResolve(() => resolve);
+      setIsConfirmDialogOpen(true);
+    });
+  }, []);
 
   const handleCreateClick = () => {
     setIsCreateDialogOpen(true);
@@ -30,58 +44,27 @@ const MeetingPage: React.FC = () => {
 
   const handleMeetingCreated = () => {
     setIsCreateDialogOpen(false);
-    // TODO: Instead of reload, refresh the meeting list
-    window.location.reload();
+    refreshMeetings();
   };
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
   };
 
-  const handleSelectMeeting = (meetingId: string) => {
-    // If currently in a joined meeting and trying to switch to a different meeting
-    if (meetingMode === 'join' && selectedMeeting && selectedMeeting !== meetingId) {
-      setConfirmAction({
-        type: 'select',
-        meetingId,
-        message: 'You are currently in a meeting. Are you sure you want to leave and view another meeting?'
-      });
-      setIsConfirmDialogOpen(true);
-      return;
-    }
-
-    setSelectedMeeting(meetingId);
-    setMeetingMode('view');
-  };
-
-  const handleJoinMeeting = (meetingId: string) => {
-    // If currently in a joined meeting and trying to join a different meeting
-    if (meetingMode === 'join' && selectedMeeting && selectedMeeting !== meetingId) {
-      setConfirmAction({
-        type: 'join',
-        meetingId,
-        message: 'You are currently in a meeting. Are you sure you want to leave and join another meeting?'
-      });
-      setIsConfirmDialogOpen(true);
-      return;
-    }
-
-    setSelectedMeeting(meetingId);
-    setMeetingMode('join');
-  };
-
   const handleConfirmLeave = () => {
-    if (confirmAction) {
-      setSelectedMeeting(confirmAction.meetingId);
-      setMeetingMode(confirmAction.type === 'join' ? 'join' : 'view');
+    if (confirmResolve) {
+      confirmResolve(true);
     }
     setIsConfirmDialogOpen(false);
-    setConfirmAction(null);
+    setConfirmResolve(null);
   };
 
   const handleCancelLeave = () => {
+    if (confirmResolve) {
+      confirmResolve(false);
+    }
     setIsConfirmDialogOpen(false);
-    setConfirmAction(null);
+    setConfirmResolve(null);
   };
 
   return (
@@ -96,15 +79,14 @@ const MeetingPage: React.FC = () => {
             onCreateClick={handleCreateClick}
           />
           <MeetingList
-            onSelectMeeting={handleSelectMeeting}
-            onJoinMeeting={handleJoinMeeting}
             searchQuery={searchQuery}
+            onRequestConfirmation={requestConfirmation}
           />
         </div>
 
         <div className="meeting-page-content">
-          {selectedMeeting ? (
-            <MeetingDetails meetingId={selectedMeeting} mode={meetingMode} />
+          {currentMeetingId ? (
+            <MeetingDetails meetingId={currentMeetingId} mode={currentMeetingMode} />
           ) : (
             <MeetingDetails meetingId="" mode="view" />
           )}
@@ -125,7 +107,7 @@ const MeetingPage: React.FC = () => {
         title="Leave Meeting?"
       >
         <div className="confirm-dialog-content">
-          <p>{confirmAction?.message}</p>
+          <p>You are currently in a meeting. Do you want to leave?</p>
           <div className="confirm-dialog-actions">
             <button
               className="confirm-dialog-button confirm-dialog-button-cancel"
@@ -143,6 +125,14 @@ const MeetingPage: React.FC = () => {
         </div>
       </Dialog>
     </Page>
+  );
+};
+
+const MeetingPage: React.FC = () => {
+  return (
+    <MeetingProvider>
+      <MeetingPageContent />
+    </MeetingProvider>
   );
 };
 

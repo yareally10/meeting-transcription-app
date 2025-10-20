@@ -4,6 +4,7 @@ import { Meeting } from '../../types';
 import AudioRecorder from './AudioRecorder';
 import RealTimeTranscription from './RealTimeTranscription';
 import KeywordsManager from './KeywordsManager';
+import { useMeetingContext } from '../../contexts/MeetingContext';
 import './MeetingDetails.css';
 
 interface MeetingDetailsProps {
@@ -13,15 +14,42 @@ interface MeetingDetailsProps {
 }
 
 export default function MeetingDetails({ meetingId, mode = 'view', onClose }: MeetingDetailsProps) {
+  const { currentMeeting, updateMeetingKeywords } = useMeetingContext();
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [websocket, setWebsocket] = useState<WebSocket | null>(null);
   const websocketRef = useRef<WebSocket | null>(null);
 
+  const loadMeetingDetails = async () => {
+    if (!meetingId) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await meetingApi.getById(meetingId);
+      setMeeting(data);
+    } catch (error) {
+      console.error('Failed to load meeting details:', error);
+      setError('Failed to load meeting details');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Use currentMeeting from context if it matches the requested meetingId
   useEffect(() => {
-    loadMeetingDetails();
-  }, [meetingId]);
+    if (currentMeeting && currentMeeting.id === meetingId) {
+      setMeeting(currentMeeting);
+      setLoading(false);
+    } else {
+      loadMeetingDetails();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meetingId, currentMeeting]);
 
 
   useEffect(() => {
@@ -104,29 +132,11 @@ export default function MeetingDetails({ meetingId, mode = 'view', onClose }: Me
     setWebsocket(ws);
   };
 
-
-  const loadMeetingDetails = async () => {
-    if (!meetingId) {
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await meetingApi.getById(meetingId);
-      setMeeting(data);
-    } catch (error) {
-      console.error('Failed to load meeting details:', error);
-      setError('Failed to load meeting details');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleKeywordsUpdated = (newKeywords: string[]) => {
     if (meeting) {
       setMeeting({ ...meeting, keywords: newKeywords });
+      // Update keywords in the context as well
+      updateMeetingKeywords(meeting.id, newKeywords);
     }
   };
 
@@ -240,7 +250,7 @@ export default function MeetingDetails({ meetingId, mode = 'view', onClose }: Me
           <div className="transcription-section">
             <h3>Full Transcription</h3>
             <div className="transcription-content">
-              <pre>{meeting.fullTranscription}</pre>
+              <p className="transcription-text-wrapped">{meeting.fullTranscription}</p>
             </div>
           </div>
         )}

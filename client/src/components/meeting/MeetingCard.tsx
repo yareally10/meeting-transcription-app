@@ -100,16 +100,6 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
         </button>
       </div>
 
-      {meeting.keywords.length > 0 && (
-        <div className="meeting-card-keywords">
-          {meeting.keywords.map((keyword, index) => (
-            <span key={index} className="meeting-card-keyword">
-              {keyword}
-            </span>
-          ))}
-        </div>
-      )}
-
       {meeting.metadata?.totalDuration && (
         <div className="meeting-card-duration">
           Duration: {Math.round(meeting.metadata.totalDuration / 1000 / 60)}m
