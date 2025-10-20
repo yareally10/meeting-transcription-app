@@ -1,0 +1,100 @@
+/* Keywords Manager Styles */
+.keywords-manager {
+  width: 100%;
+}
+
+.keywords-input-wrapper {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  align-items: center;
+}
+
+.keywords-input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.95rem;
+}
+
+.keywords-input:focus {
+  outline: none;
+  border-color: #1976d2;
+}
+
+.keywords-input:disabled {
+  background: #f5f5f5;
+  cursor: not-allowed;
+}
+
+.keywords-add-button {
+  padding: 0.5rem 1rem;
+  background: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color 0.2s;
+}
+
+.keywords-add-button:hover:not(:disabled) {
+  background: #45a049;
+}
+
+.keywords-add-button:disabled {
+  background: #cccccc;
+  cursor: not-allowed;
+}
+
+.keywords-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.keyword-tag {
+  background: #e3f2fd;
+  color: #1976d2;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.keyword-remove-button {
+  background: none;
+  border: none;
+  color: #1976d2;
+  cursor: pointer;
+  padding: 0;
+  font-size: 1rem;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.keyword-remove-button:hover:not(:disabled) {
+  background: rgba(25, 118, 210, 0.1);
+}
+
+.keyword-remove-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.loading-indicator {
+  font-size: 0.875rem;
+  color: #666;
+  margin-top: 0.5rem;
+  font-style: italic;
+}

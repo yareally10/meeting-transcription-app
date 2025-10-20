@@ -1,5 +1,6 @@
 import React from 'react';
 import { Meeting } from '../../types';
+import './MeetingCard.css';
 
 interface MeetingCardProps {
   meeting: Meeting;
