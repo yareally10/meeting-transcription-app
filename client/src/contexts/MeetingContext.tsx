@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
-import { Meeting } from '../types';
+import { Meeting, CreateMeetingRequest } from '../types';
 import { meetingApi } from '../services/api';
 
 interface MeetingContextType {
@@ -10,6 +10,7 @@ interface MeetingContextType {
   currentMeetingMode: 'view' | 'join';
 
   // Actions
+  createMeeting: (data: CreateMeetingRequest) => Promise<Meeting | null>;
   selectMeeting: (meetingId: string) => Promise<boolean>;
   joinMeeting: (meetingId: string) => Promise<boolean>;
   leaveMeeting: () => void;
@@ -20,6 +21,7 @@ interface MeetingContextType {
   // Status
   isInActiveMeeting: boolean;
   isLoading: boolean;
+  error: string | null;
 }
 
 const MeetingContext = createContext<MeetingContextType | undefined>(undefined);
@@ -34,17 +36,40 @@ export const MeetingProvider: React.FC<MeetingProviderProps> = ({ children }) =>
   const [currentMeeting, setCurrentMeeting] = useState<Meeting | null>(null);
   const [currentMeetingMode, setCurrentMeetingMode] = useState<'view' | 'join'>('view');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const isInActiveMeeting = currentMeetingMode === 'join' && currentMeetingId !== null;
+
+  // Create a new meeting
+  const createMeeting = useCallback(async (data: CreateMeetingRequest): Promise<Meeting | null> => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const newMeeting = await meetingApi.create(data);
+      // Add to the beginning of the meetings list
+      setMeetings(prev => [newMeeting, ...prev]);
+      return newMeeting;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create meeting';
+      setError(errorMessage);
+      console.error('Failed to create meeting:', err);
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   // Load all meetings
   const refreshMeetings = useCallback(async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const data = await meetingApi.getAll();
       setMeetings(data);
-    } catch (error) {
-      console.error('Failed to load meetings:', error);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load meetings';
+      setError(errorMessage);
+      console.error('Failed to load meetings:', err);
     } finally {
       setIsLoading(false);
     }
@@ -130,6 +155,7 @@ export const MeetingProvider: React.FC<MeetingProviderProps> = ({ children }) =>
     currentMeeting,
     currentMeetingId,
     currentMeetingMode,
+    createMeeting,
     selectMeeting,
     joinMeeting,
     leaveMeeting,
@@ -138,6 +164,7 @@ export const MeetingProvider: React.FC<MeetingProviderProps> = ({ children }) =>
     updateMeetingKeywords,
     isInActiveMeeting,
     isLoading,
+    error,
   };
 
   return (

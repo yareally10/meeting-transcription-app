@@ -12,6 +12,7 @@ const MeetingPageContent: React.FC = () => {
     currentMeetingId,
     currentMeetingMode,
     refreshMeetings,
+    joinMeeting,
   } = useMeetingContext();
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -42,9 +43,10 @@ const MeetingPageContent: React.FC = () => {
     setIsCreateDialogOpen(false);
   };
 
-  const handleMeetingCreated = () => {
+  const handleMeetingCreated = async (meeting: any) => {
     setIsCreateDialogOpen(false);
-    refreshMeetings();
+    // Auto-join the newly created meeting
+    await joinMeeting(meeting.id);
   };
 
   const handleSearch = (query: string) => {
