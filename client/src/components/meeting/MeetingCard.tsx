@@ -6,6 +6,7 @@ interface MeetingCardProps {
   meeting: Meeting;
   isSelected: boolean;
   onSelect: (meeting: Meeting) => void;
+  onJoin: (meeting: Meeting) => void;
   onDelete: (id: string) => void;
 }
 
@@ -13,6 +14,7 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
   meeting,
   isSelected,
   onSelect,
+  onJoin,
   onDelete
 }) => {
   const handleDelete = (e: React.MouseEvent) => {
@@ -20,6 +22,11 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
     if (window.confirm(`Are you sure you want to delete "${meeting.title}"?`)) {
       onDelete(meeting.id);
     }
+  };
+
+  const handleJoin = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onJoin(meeting);
   };
 
   const formatDate = (dateString: string) => {
@@ -84,6 +91,13 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
         <span className="meeting-card-date">
           {formatDate(meeting.createdAt)}
         </span>
+        <button
+          className="meeting-card-join-button"
+          onClick={handleJoin}
+          aria-label="Join meeting"
+        >
+          Join
+        </button>
       </div>
 
       {meeting.keywords.length > 0 && (

@@ -72,6 +72,7 @@
   align-items: center;
   gap: 0.75rem;
   margin-bottom: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .meeting-card-status {
@@ -87,6 +88,24 @@
 .meeting-card-date {
   font-size: 0.85rem;
   color: #999;
+}
+
+.meeting-card-join-button {
+  margin-left: auto;
+  padding: 0.4rem 0.9rem;
+  background: #1976d2;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  transition: background-color 0.2s;
+}
+
+.meeting-card-join-button:hover {
+  background: #1565c0;
 }
 
 .meeting-card-keywords {

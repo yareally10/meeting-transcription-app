@@ -6,10 +6,11 @@ import { List } from '../core';
 
 interface MeetingListProps {
   onSelectMeeting: (meetingId: string) => void;
+  onJoinMeeting: (meetingId: string) => void;
   searchQuery?: string;
 }
 
-export default function MeetingList({ onSelectMeeting, searchQuery = '' }: MeetingListProps) {
+export default function MeetingList({ onSelectMeeting, onJoinMeeting, searchQuery = '' }: MeetingListProps) {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
@@ -32,6 +33,11 @@ export default function MeetingList({ onSelectMeeting, searchQuery = '' }: Meeti
   const handleSelectMeeting = (meeting: Meeting) => {
     setSelectedMeetingId(meeting.id);
     onSelectMeeting(meeting.id);
+  };
+
+  const handleJoinMeeting = (meeting: Meeting) => {
+    setSelectedMeetingId(meeting.id);
+    onJoinMeeting(meeting.id);
   };
 
   const handleDeleteMeeting = async (meetingId: string) => {
@@ -90,6 +96,7 @@ export default function MeetingList({ onSelectMeeting, searchQuery = '' }: Meeti
                 meeting={meeting}
                 isSelected={selectedMeetingId === meeting.id}
                 onSelect={handleSelectMeeting}
+                onJoin={handleJoinMeeting}
                 onDelete={handleDeleteMeeting}
               />
             </List.Item>

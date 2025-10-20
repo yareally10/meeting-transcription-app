@@ -1,0 +1,17 @@
+/* Meeting Details Styles */
+
+.keywords-list-readonly {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.keyword-tag-readonly {
+  background: #e3f2fd;
+  color: #1976d2;
+  padding: 0.25rem 0.65rem;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
