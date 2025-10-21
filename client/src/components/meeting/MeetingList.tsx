@@ -1,54 +1,52 @@
-import { useState, useEffect } from 'react';
-import { meetingApi } from '../../services/api';
+import { useState } from 'react';
+import { useMeetingContext } from '../../contexts/MeetingContext';
 import { Meeting } from '../../types';
 import MeetingCard from './MeetingCard';
+import MeetingListControls from './MeetingListControls';
 import { List } from '../core';
+import './MeetingList.css';
 
 interface MeetingListProps {
-  onSelectMeeting: (meetingId: string) => void;
-  searchQuery?: string;
+  onRequestConfirmation: () => Promise<boolean>;
+  onCreateClick: () => void;
 }
 
-export default function MeetingList({ onSelectMeeting, searchQuery = '' }: MeetingListProps) {
-  const [meetings, setMeetings] = useState<Meeting[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
+export default function MeetingList({ onRequestConfirmation, onCreateClick }: MeetingListProps) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const {
+    meetings,
+    currentMeetingId,
+    isInActiveMeeting,
+    selectMeeting,
+    joinMeeting,
+    isLoading
+  } = useMeetingContext();
 
-  useEffect(() => {
-    loadMeetings();
-  }, []);
-
-  const loadMeetings = async () => {
-    try {
-      const data = await meetingApi.getAll();
-      setMeetings(data);
-    } catch (error) {
-      console.error('Failed to load meetings:', error);
-    } finally {
-      setLoading(false);
+  const handleSelectMeeting = async (meeting: Meeting) => {
+    // Check if we need confirmation before switching
+    if (isInActiveMeeting) {
+      const confirmed = await onRequestConfirmation();
+      if (!confirmed) return; // User cancelled
     }
+
+    await selectMeeting(meeting.id);
   };
 
-  const handleSelectMeeting = (meeting: Meeting) => {
-    setSelectedMeetingId(meeting.id);
-    onSelectMeeting(meeting.id);
-  };
-
-  const handleDeleteMeeting = async (meetingId: string) => {
-    try {
-      await meetingApi.delete(meetingId);
-      setMeetings(meetings.filter(m => m.id !== meetingId));
-      if (selectedMeetingId === meetingId) {
-        setSelectedMeetingId(null);
-        onSelectMeeting('');
-      }
-    } catch (error) {
-      console.error('Failed to delete meeting:', error);
-      alert('Failed to delete meeting');
+  const handleJoinMeeting = async (meeting: Meeting) => {
+    // Check if we need confirmation before switching
+    if (isInActiveMeeting && currentMeetingId !== meeting.id) {
+      const confirmed = await onRequestConfirmation();
+      if (!confirmed) return; // User cancelled
     }
+
+    await joinMeeting(meeting.id);
   };
 
-  if (loading) {
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+  };
+
+  if (isLoading) {
     return <div>Loading meetings...</div>;
   }
 
@@ -59,19 +57,21 @@ export default function MeetingList({ onSelectMeeting, searchQuery = '' }: Meeti
     const query = searchQuery.toLowerCase();
     return (
       meeting.title.toLowerCase().includes(query) ||
-      meeting.description.toLowerCase().includes(query) ||
-      meeting.keywords.some(keyword => keyword.toLowerCase().includes(query))
+      meeting.description.toLowerCase().includes(query)
     );
   });
 
   return (
-    <div>
-      <div className="meeting-list-count">
-        {filteredMeetings.length} {filteredMeetings.length === 1 ? 'meeting' : 'meetings'}
-        {searchQuery && filteredMeetings.length !== meetings.length && (
-          <span className="meeting-list-count-total"> (of {meetings.length} total)</span>
-        )}
-      </div>
+    <div className="meeting-list-container">
+      <h1 className="meeting-list-title">
+        {filteredMeetings.length === 1 ? 'Meeting' : 'Meetings'} [{filteredMeetings.length} / {meetings.length}] 
+      </h1>
+
+      <MeetingListControls
+        onSearch={handleSearch}
+        onCreateClick={onCreateClick}
+      />
+
       {filteredMeetings.length === 0 ? (
         <p className="meeting-list-empty">
           {searchQuery
@@ -83,14 +83,14 @@ export default function MeetingList({ onSelectMeeting, searchQuery = '' }: Meeti
           {filteredMeetings.map((meeting) => (
             <List.Item
               key={meeting.id}
-              isSelected={selectedMeetingId === meeting.id}
+              isSelected={currentMeetingId === meeting.id}
               onClick={() => handleSelectMeeting(meeting)}
             >
               <MeetingCard
                 meeting={meeting}
-                isSelected={selectedMeetingId === meeting.id}
+                isSelected={currentMeetingId === meeting.id}
                 onSelect={handleSelectMeeting}
-                onDelete={handleDeleteMeeting}
+                onJoin={handleJoinMeeting}
               />
             </List.Item>
           ))}

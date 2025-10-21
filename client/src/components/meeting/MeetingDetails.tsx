@@ -4,26 +4,59 @@ import { Meeting } from '../../types';
 import AudioRecorder from './AudioRecorder';
 import RealTimeTranscription from './RealTimeTranscription';
 import KeywordsManager from './KeywordsManager';
+import { Dialog } from '../core';
+import { useMeetingContext } from '../../contexts/MeetingContext';
+import './MeetingDetails.css';
 
 interface MeetingDetailsProps {
   meetingId: string;
+  mode?: 'view' | 'join'; // 'view' shows only basic info, 'join' shows full meeting interface
   onClose?: () => void;
 }
 
-export default function MeetingDetails({ meetingId, onClose }: MeetingDetailsProps) {
+export default function MeetingDetails({ meetingId, mode = 'view', onClose }: MeetingDetailsProps) {
+  const { currentMeeting, updateMeetingKeywords, deleteMeeting, leaveMeeting } = useMeetingContext();
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [websocket, setWebsocket] = useState<WebSocket | null>(null);
   const websocketRef = useRef<WebSocket | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+
+  const loadMeetingDetails = async () => {
+    if (!meetingId) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await meetingApi.getById(meetingId);
+      setMeeting(data);
+    } catch (error) {
+      console.error('Failed to load meeting details:', error);
+      setError('Failed to load meeting details');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Use currentMeeting from context if it matches the requested meetingId
+  useEffect(() => {
+    if (currentMeeting && currentMeeting.id === meetingId) {
+      setMeeting(currentMeeting);
+      setLoading(false);
+    } else {
+      loadMeetingDetails();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meetingId, currentMeeting]);
+
 
   useEffect(() => {
-    loadMeetingDetails();
-  }, [meetingId]);
-
-
-  useEffect(() => {
-    if (meetingId) {
+    // Only connect WebSocket in 'join' mode
+    if (meetingId && mode === 'join') {
       connectWebSocket();
     }
 
@@ -42,7 +75,7 @@ export default function MeetingDetails({ meetingId, onClose }: MeetingDetailsPro
         websocketRef.current.close();
       }
     };
-  }, [meetingId]);
+  }, [meetingId, mode]);
 
   const connectWebSocket = () => {
     if (websocketRef.current) {
@@ -101,32 +134,33 @@ export default function MeetingDetails({ meetingId, onClose }: MeetingDetailsPro
     setWebsocket(ws);
   };
 
-
-  const loadMeetingDetails = async () => {
-    if (!meetingId) {
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await meetingApi.getById(meetingId);
-      setMeeting(data);
-    } catch (error) {
-      console.error('Failed to load meeting details:', error);
-      setError('Failed to load meeting details');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleKeywordsUpdated = (newKeywords: string[]) => {
     if (meeting) {
       setMeeting({ ...meeting, keywords: newKeywords });
+      // Update keywords in the context as well
+      updateMeetingKeywords(meeting.id, newKeywords);
     }
   };
 
+  const handleDeleteClick = () => {
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    try {
+      await deleteMeeting(meetingId);
+      setIsDeleteDialogOpen(false);
+      // Leave the meeting and clear the selection
+      leaveMeeting();
+    } catch (error) {
+      console.error('Failed to delete meeting:', error);
+      alert('Failed to delete meeting');
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setIsDeleteDialogOpen(false);
+  };
 
   if (!meetingId) {
     return (
@@ -159,18 +193,62 @@ export default function MeetingDetails({ meetingId, onClose }: MeetingDetailsPro
     );
   }
 
-  return (
-    <div className="meeting-details">
-      <div className="meeting-details-header">
-        <h2>{meeting.title}</h2>
-        {onClose && (
-          <button onClick={onClose} className="close-btn">
-            ×
-          </button>
-        )}
-      </div>
+  // Render in 'view' mode: only title, description, and keywords (read-only)
+  if (mode === 'view') {
+    return (
+      <div className="meeting-details">
+        <div className="meeting-details-header">
+          <h2>{meeting.title}</h2>
+          {onClose && (
+            <button onClick={onClose} className="close-btn">
+              ×
+            </button>
+          )}
+        </div>
 
-      <div className="meeting-details-content">
+        <div className="meeting-details-content">
+          <div className="description-section">
+            <h3>Description</h3>
+            <p>{meeting.description ? meeting.description : 'none'}</p>
+          </div>
+
+
+          {meeting.keywords && meeting.keywords.length > 0 && (
+            <div className="keywords-section">
+              <h3>Keywords</h3>
+              <div className="keywords-list-readonly">
+                {meeting.keywords.map((keyword, index) => (
+                  <span key={index} className="keyword-tag-readonly">
+                    {keyword}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Render in 'join' mode: full meeting interface with audio recorder and transcription
+  return (
+    <>
+      <div className="meeting-details">
+        <div className="meeting-details-header">
+          <h2>{meeting.title}</h2>
+          <div className="meeting-details-header-actions">
+            <button onClick={handleDeleteClick} className="delete-meeting-btn">
+              Delete Meeting
+            </button>
+            {onClose && (
+              <button onClick={onClose} className="close-btn">
+                ×
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="meeting-details-content">
         {meeting.description && (
           <div className="description-section">
             <h3>Description</h3>
@@ -188,8 +266,8 @@ export default function MeetingDetails({ meetingId, onClose }: MeetingDetailsPro
           />
         </div>
 
-        <AudioRecorder 
-          meetingId={meetingId} 
+        <AudioRecorder
+          meetingId={meetingId}
           websocket={websocket}
         />
 
@@ -199,7 +277,7 @@ export default function MeetingDetails({ meetingId, onClose }: MeetingDetailsPro
           <div className="transcription-section">
             <h3>Full Transcription</h3>
             <div className="transcription-content">
-              <pre>{meeting.fullTranscription}</pre>
+              <p className="transcription-text-wrapped">{meeting.fullTranscription}</p>
             </div>
           </div>
         )}
@@ -249,5 +327,30 @@ export default function MeetingDetails({ meetingId, onClose }: MeetingDetailsPro
         )}
       </div>
     </div>
+
+    <Dialog
+      isOpen={isDeleteDialogOpen}
+      onClose={handleDeleteCancel}
+      title="Delete Meeting?"
+    >
+      <div className="confirm-dialog-content">
+        <p>Are you sure you want to delete "{meeting.title}"? This action cannot be undone.</p>
+        <div className="confirm-dialog-actions">
+          <button
+            className="confirm-dialog-button confirm-dialog-button-cancel"
+            onClick={handleDeleteCancel}
+          >
+            Cancel
+          </button>
+          <button
+            className="confirm-dialog-button confirm-dialog-button-confirm"
+            onClick={handleDeleteConfirm}
+          >
+            Delete Meeting
+          </button>
+        </div>
+      </div>
+    </Dialog>
+    </>
   );
 }

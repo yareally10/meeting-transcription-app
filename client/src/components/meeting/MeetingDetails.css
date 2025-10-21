@@ -1,0 +1,71 @@
+/* Meeting Details Styles */
+
+.meeting-details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.meeting-details-header h2 {
+  margin: 0;
+}
+
+.meeting-details-header-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.delete-meeting-btn {
+  padding: 0.5rem 1rem;
+  background: #f44336;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.delete-meeting-btn:hover {
+  background: #d32f2f;
+}
+
+.close-btn {
+  padding: 0.25rem 0.5rem;
+  background: transparent;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #666;
+  transition: color 0.2s;
+}
+
+.close-btn:hover {
+  color: #333;
+}
+
+.keywords-list-readonly {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.keyword-tag-readonly {
+  background: #e3f2fd;
+  color: #1976d2;
+  padding: 0.25rem 0.65rem;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.transcription-text-wrapped {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  margin: 0;
+  line-height: 1.6;
+  color: #333;
+}

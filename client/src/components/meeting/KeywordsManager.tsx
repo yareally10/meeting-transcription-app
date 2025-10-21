@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { meetingApi } from '../../services/api';
+import './KeywordsManager.css';
 
 interface KeywordsManagerProps {
   meetingId?: string; // Optional for creation mode
@@ -78,19 +79,21 @@ export default function KeywordsManager({
   return (
     <div className="keywords-manager">
       {showTitle && <h4>Keywords</h4>}
-      
-      <div className="keywords-input">
+
+      <div className="keywords-input-wrapper">
         <input
           type="text"
+          className="keywords-input"
           value={keywordInput}
           onChange={(e) => setKeywordInput(e.target.value)}
           onKeyDown={handleKeyPress}
           placeholder="Add keyword and press Enter"
           disabled={loading || disabled}
         />
-        <button 
-          type="button" 
-          onClick={addKeyword} 
+        <button
+          type="button"
+          className="keywords-add-button"
+          onClick={addKeyword}
           disabled={loading || disabled || !keywordInput.trim()}
         >
           Add
@@ -101,8 +104,9 @@ export default function KeywordsManager({
         {keywords.map((keyword) => (
           <span key={keyword} className="keyword-tag">
             {keyword}
-            <button 
-              type="button" 
+            <button
+              type="button"
+              className="keyword-remove-button"
               onClick={() => removeKeyword(keyword)}
               disabled={loading || disabled}
             >

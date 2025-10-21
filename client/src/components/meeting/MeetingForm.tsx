@@ -1,17 +1,18 @@
 import { useState } from 'react';
-import { meetingApi } from '../../services/api';
-import { CreateMeetingRequest } from '../../types';
+import { Meeting, CreateMeetingRequest } from '../../types';
+import { useMeetingContext } from '../../contexts/MeetingContext';
 import KeywordsManager from './KeywordsManager';
+import './MeetingForm.css';
 
 interface MeetingFormProps {
-  onMeetingCreated: () => void;
+  onMeetingCreated: (meeting: Meeting) => void;
 }
 
 export default function MeetingForm({ onMeetingCreated }: MeetingFormProps) {
+  const { createMeeting, isLoading, error } = useMeetingContext();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [keywords, setKeywords] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
 
   const handleKeywordsUpdated = (newKeywords: string[]) => {
     setKeywords(newKeywords);
@@ -21,31 +22,33 @@ export default function MeetingForm({ onMeetingCreated }: MeetingFormProps) {
     e.preventDefault();
     if (!title.trim()) return;
 
-    setLoading(true);
-    try {
-      const meetingData: CreateMeetingRequest = {
-        title: title.trim(),
-        description: description.trim(),
-        keywords,
-      };
-      
-      await meetingApi.create(meetingData);
+    const meetingData: CreateMeetingRequest = {
+      title: title.trim(),
+      description: description.trim(),
+      keywords,
+    };
+
+    const newMeeting = await createMeeting(meetingData);
+
+    if (newMeeting) {
+      // Clear form
       setTitle('');
       setDescription('');
       setKeywords([]);
-      onMeetingCreated();
-    } catch (error) {
-      console.error('Failed to create meeting:', error);
-      alert('Failed to create meeting');
-    } finally {
-      setLoading(false);
+      onMeetingCreated(newMeeting);
     }
   };
 
   return (
     <form onSubmit={handleSubmit} className="meeting-form">
       <h3>Create New Meeting</h3>
-      
+
+      {error && (
+        <div className="form-error" style={{ color: '#d32f2f', marginBottom: '1rem' }}>
+          {error}
+        </div>
+      )}
+
       <div className="form-group">
         <label htmlFor="title">Title</label>
         <input
@@ -74,13 +77,13 @@ export default function MeetingForm({ onMeetingCreated }: MeetingFormProps) {
         <KeywordsManager
           currentKeywords={keywords}
           onKeywordsUpdated={handleKeywordsUpdated}
-          disabled={loading}
+          disabled={isLoading}
           showTitle={false}
         />
       </div>
 
-      <button type="submit" disabled={loading || !title.trim()}>
-        {loading ? 'Creating...' : 'Create Meeting'}
+      <button type="submit" disabled={isLoading || !title.trim()}>
+        {isLoading ? 'Creating...' : 'Create Meeting'}
       </button>
     </form>
   );

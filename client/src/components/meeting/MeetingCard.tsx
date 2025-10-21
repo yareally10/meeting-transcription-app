@@ -1,24 +1,23 @@
 import React from 'react';
 import { Meeting } from '../../types';
+import './MeetingCard.css';
 
 interface MeetingCardProps {
   meeting: Meeting;
   isSelected: boolean;
   onSelect: (meeting: Meeting) => void;
-  onDelete: (id: string) => void;
+  onJoin: (meeting: Meeting) => void;
 }
 
 const MeetingCard: React.FC<MeetingCardProps> = ({
   meeting,
   isSelected,
   onSelect,
-  onDelete
+  onJoin
 }) => {
-  const handleDelete = (e: React.MouseEvent) => {
+  const handleJoin = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.confirm(`Are you sure you want to delete "${meeting.title}"?`)) {
-      onDelete(meeting.id);
-    }
+    onJoin(meeting);
   };
 
   const formatDate = (dateString: string) => {
@@ -56,13 +55,6 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
     >
       <div className="meeting-card-header">
         <h3 className="meeting-card-title">{meeting.title}</h3>
-        <button
-          className="meeting-card-delete"
-          onClick={handleDelete}
-          aria-label="Delete meeting"
-        >
-          ×
-        </button>
       </div>
 
       {meeting.description && (
@@ -83,17 +75,14 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
         <span className="meeting-card-date">
           {formatDate(meeting.createdAt)}
         </span>
+        <button
+          className="meeting-card-join-button"
+          onClick={handleJoin}
+          aria-label="Join meeting"
+        >
+          Join
+        </button>
       </div>
-
-      {meeting.keywords.length > 0 && (
-        <div className="meeting-card-keywords">
-          {meeting.keywords.map((keyword, index) => (
-            <span key={index} className="meeting-card-keyword">
-              {keyword}
-            </span>
-          ))}
-        </div>
-      )}
 
       {meeting.metadata?.totalDuration && (
         <div className="meeting-card-duration">
